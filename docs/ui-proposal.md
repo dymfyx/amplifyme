@@ -418,8 +418,8 @@ P0 已交付：
 
 ### 15.5 行情节奏与费率修正
 
-- `PRICE_UPDATE_TICKS` 4 → **2**（0.5 秒一跳），新增 `PRICE_VOL_PER_UPDATE = √½`，单步幅度降 ~29%，`CHART_POINTS`/`HISTORY_POINTS`
-  240（1 根 ≈ 97.5 模拟秒，一个交易日 240 根）。
+- `PRICE_UPDATE_TICKS` 4 → 2 → **1**（0.25 秒一跳，盘口连续变化），`CHART_POINTS`/`HISTORY_POINTS`
+  **480**（1 根 ≈ 48.75 模拟秒，一个交易日 480 根）；`FLOW_CHANCE` 0.45 → **0.92**、流动 bps 上调并加入 sweep 事件，让曲线连续起伏而不是一段段平线。
 - `COMMISSION_RATE` 0.005 → **0.0005**。原 50bps/边 下，`BUY 2,000 @803.22 → SELL 2,000 @810.78` 毛利 15,120 被 16,140
   的佣金吃成 −1,020；5bps 下同一笔来回净赚约 13,506。
 - 测试：`src/engine/scoring.test.ts` 10 例（遥测记录、edge 方向、结算统计、空局中性、六维边界、盈利/亏损局 returns 对照），
@@ -434,7 +434,7 @@ P0 已交付：
 
 ### 16.2 引擎模型（`src/engine/simulation.ts`）
 
-- 价格 = Σ 具名驱动，不再有裸噪声。每次行情刷新（`PRICE_UPDATE_TICKS = 2`，0.5 秒）计算：
+- 价格 = Σ 具名驱动，不再有裸噪声。每次行情刷新（`PRICE_UPDATE_TICKS = 1`，0.25 秒）计算：
   `netBps = Σ(已释放的新闻冲量 bps × direction) + 微观流动 bps × direction`，
   再 `last = round2(max(0.01, last × (1 + netBps / 10000)))`。
 - **新闻冲量** `PriceImpulse{ id, label, direction, bps, ttl, hint }`：头条到点后按标的生成，

@@ -46,7 +46,7 @@ export interface NewsTemplate {
   driftBps?: number
 }
 
-/** 市场微观流动：每 0.5 秒的行情刷新都会抽一个来源，保证每次价格变动都有解释 */
+/** 市场微观流动：几乎每一帧行情刷新都会抽一个来源，保证每次价格变动都有解释 */
 export interface FlowEvent {
   id: string
   label: string
@@ -60,16 +60,18 @@ export interface FlowEvent {
 }
 
 export const FLOW_EVENTS: FlowEvent[] = [
-  { id: 'flow-buy', label: 'buy flow', direction: 1, bps: 3, hint: 'A broker is working a buy order in the name', weight: 20 },
-  { id: 'flow-sell', label: 'sell flow', direction: -1, bps: 3, hint: 'Sell-side inventory is being worked', weight: 20 },
-  { id: 'flow-etf', label: 'ETF bid', direction: 1, bps: 5, hint: 'Index rebalance flow is leaning bid', weight: 10 },
-  { id: 'flow-etf-out', label: 'ETF offer', direction: -1, bps: 5, hint: 'Index rebalance flow is leaning offer', weight: 10 },
-  { id: 'flow-cover', label: 'short cover', direction: 1, bps: 5, hint: 'Shorts are covering into the move', weight: 8 },
-  { id: 'flow-unwind', label: 'long unwind', direction: -1, bps: 5, hint: 'A long is unwinding into the bid', weight: 8 },
-  { id: 'flow-retail', label: 'retail bid', direction: 1, bps: 2, hint: 'Retail flow is leaning bid', weight: 12 },
-  { id: 'flow-retail-out', label: 'retail sell', direction: -1, bps: 2, hint: 'Retail flow is leaning offer', weight: 12 },
-  { id: 'flow-index', label: 'index flow', direction: 0, bps: 3, hint: 'Index futures are driving the tape', weight: 12 },
-  { id: 'flow-block', label: 'block print', direction: 0, bps: 8, hint: 'A block just printed through the book', weight: 4 },
+  { id: 'flow-buy', label: 'buy flow', direction: 1, bps: 4, hint: 'A broker is working a buy order in the name', weight: 20 },
+  { id: 'flow-sell', label: 'sell flow', direction: -1, bps: 4, hint: 'Sell-side inventory is being worked', weight: 20 },
+  { id: 'flow-etf', label: 'ETF bid', direction: 1, bps: 6, hint: 'Index rebalance flow is leaning bid', weight: 10 },
+  { id: 'flow-etf-out', label: 'ETF offer', direction: -1, bps: 6, hint: 'Index rebalance flow is leaning offer', weight: 10 },
+  { id: 'flow-cover', label: 'short cover', direction: 1, bps: 6, hint: 'Shorts are covering into the move', weight: 8 },
+  { id: 'flow-unwind', label: 'long unwind', direction: -1, bps: 6, hint: 'A long is unwinding into the bid', weight: 8 },
+  { id: 'flow-retail', label: 'retail bid', direction: 1, bps: 3, hint: 'Retail flow is leaning bid', weight: 12 },
+  { id: 'flow-retail-out', label: 'retail sell', direction: -1, bps: 3, hint: 'Retail flow is leaning offer', weight: 12 },
+  { id: 'flow-index', label: 'index flow', direction: 0, bps: 4, hint: 'Index futures are driving the tape', weight: 12 },
+  { id: 'flow-block', label: 'block print', direction: 0, bps: 11, hint: 'A block just printed through the book', weight: 4 },
+  { id: 'flow-sweep', label: 'sweep bid', direction: 1, bps: 9, hint: 'A buyer sweeps several offers on the screen', weight: 5 },
+  { id: 'flow-sweep-out', label: 'sweep offer', direction: -1, bps: 9, hint: 'A seller sweeps several bids on the screen', weight: 5 },
 ]
 
 const MINUTE = 60

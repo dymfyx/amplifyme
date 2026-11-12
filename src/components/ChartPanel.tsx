@@ -12,14 +12,14 @@ const RANGES = ['30M', '2H', '6H', '1D'] as const
 type RangeKey = (typeof RANGES)[number]
 
 /**
- * 图上是 120 根滚动窗口，一根 = 一次行情刷新 ≈ 195 个模拟秒（3.25 分钟），
- * 所以 1 个交易日正好 120 根；窗口标签直接按模拟时间给。
+ * 一根 = 一次行情刷新（0.25 秒真实时间 ≈ 48.75 个模拟秒），所以 1 个交易日正好 480 根。
+ * 窗口标签按模拟时间给，档位换算成对应的根数。
  */
 const RANGE_POINTS: Record<RangeKey, number> = {
-  '30M': 9,
-  '2H': 37,
-  '6H': 111,
-  '1D': 120,
+  '30M': 37,
+  '2H': 148,
+  '6H': 443,
+  '1D': 480,
 }
 
 export interface ChartMarker {

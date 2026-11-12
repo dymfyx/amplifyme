@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CHART_POINTS,
   COMMISSION_RATE,
   DAY_SECONDS,
   PRICE_UPDATE_TICKS,
@@ -97,19 +98,11 @@ describe('market data', () => {
     }
   })
 
-  it('only refreshes the tape every few frames so the screen stays readable', () => {
-    const quiet = advanceSession(session(), PRICE_UPDATE_TICKS - 1)
-    const azn = quiet.instruments.find((instrument) => instrument.symbol === 'AZN')
+  it('keeps the tape moving and the chart window bounded', () => {
     const fresh = session().instruments.find((instrument) => instrument.symbol === 'AZN')
-    expect(azn?.last).toBe(fresh?.last)
-    expect(azn?.series).toHaveLength(fresh?.series.length ?? 0)
-    expect(azn?.book).toEqual(fresh?.book)
-
-    const moved = advanceSession(session(), PRICE_UPDATE_TICKS)
-    const after = moved.instruments.find((instrument) => instrument.symbol === 'AZN')
-    expect(after?.lastMove).not.toBe(0)
-    const cap = 240
-    expect(after?.series).toHaveLength(Math.min((fresh?.series.length ?? 0) + 1, cap))
+    const moved = advanceSession(session(), 8).instruments.find((instrument) => instrument.symbol === 'AZN')
+    expect(moved?.last).not.toBe(fresh?.last)
+    expect(moved?.series).toHaveLength(Math.min((fresh?.series.length ?? 0) + 8, CHART_POINTS))
   })
 
   it('keeps the same seed reproducible and labels the session with it', () => {

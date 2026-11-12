@@ -73,14 +73,14 @@ A 250 ms tick is not a price update. The tape refreshes on a slower cadence so t
 
 | Knob | Value | Meaning |
 |---|---|---|
-| `PRICE_UPDATE_TICKS` | 2 | Prices move **twice a second**; the ticks in between only advance the clock |
+| `PRICE_UPDATE_TICKS` | 1 | Prices move on **every tick (4 times a second)** so the tape walks continuously instead of stepping |
 | `BOOK_MIN_MOVE_BPS` | 8 | The five-level book is only rebuilt once the mid has moved 8 bps (0.08%) |
 | `FORCED_REBOOK_BPS` | 12 | A headline worth at least 12 bps to that name rebuilds the book immediately |
 | `DRIFT_RELEASE` / `DRIFT_TTL` | 0.25 / 24 | A headline releases a quarter of its remaining drift per update, over 24 updates (~12 s) |
-| `FLOW_CHANCE` | 0.45 | Only ~45% of updates carry an order-flow print; with no driver the price simply does not move |
+| `FLOW_CHANCE` | 0.92 | Nearly every update carries an order-flow print (small clips most of the time, an occasional sweep); with no driver the price does not move |
 
 Each price update appends one point to the chart series, so the `30M / 2H / 6H / 1D` ranges read as
-97.5-second bars (240 bars per trading day). Order sizes are carried over with a ±30% jitter between
+48.75-second bars (480 bars per trading day). Order sizes are carried over with a ±30% jitter between
 rebuilds instead of being re-drawn from scratch.
 
 Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
@@ -93,7 +93,7 @@ Prices are event driven: every update is the sum of **named drivers**, so no mov
 | Driver | Where it comes from | Typical size |
 |---|---|---|
 | `headline` | a released news item with `direction` (+1/-1) and `driftBps` in `src/engine/scenario.ts`, scaled by the name's `sigma` (0.7x-1.8x) | up to ±110 bps, released over ~12 s |
-| `flow` | one of ten balanced microstructure events in `FLOW_EVENTS` (buy flow / sell flow, ETF bid / ETF offer, short cover / long unwind, retail bid / retail sell, index flow, block print), drawn by weight with equal bullish/bearish mass | 2-8 bps per update |
+| `flow` | one of twelve balanced microstructure events in `FLOW_EVENTS` (buy flow / sell flow, ETF bid / ETF offer, short cover / long unwind, retail bid / retail sell, index flow, block print, sweep bid / sweep offer), drawn by weight with equal bullish/bearish mass; occasional sweeps print 3x normal size | 3-11 bps per update |
 
 The `PRICE TAPE` panel lists every material update with its drivers, and the `DRIVER` column in
 `MARKET WATCH` shows the latest cause per name (hover for the full remark). The event feed tags each
@@ -223,7 +223,7 @@ Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-l
 |---|---|
 | P0 (done) | Static shell, role selection, all panels on mock data |
 | P1 (done) | Clock control, tick stream, quotes/orders, fills, mark-to-market P&L |
-| P2 (done) | Decision telemetry -> live scorecard + settlement report, 5 bps commission, 0.5 s tape |
+| P2 (done) | Decision telemetry -> live scorecard + settlement report, 5 bps commission, 0.25 s tape |
 | P2.5 (done) | Event-driven prices with named drivers, PRICE TAPE panel, static hosting / single-file build |
 | P3 | Polish: replay, sounds, resizable panels, session save/restore |
 

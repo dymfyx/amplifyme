@@ -41,10 +41,10 @@ export const SESSION_SECONDS = DAY_SECONDS * SESSION_DAYS
 export const START_SECONDS = 9 * 3600 + 30 * 60
 export const SIM_SECONDS_PER_TICK = SESSION_SECONDS / ((30 * 60 * 1000) / TICK_MS)
 /**
- * 行情节奏：时钟每帧都走，但价格与盘口每 2 帧（0.5 秒真实时间）才刷新一次。
- * 每次刷新都由「一个微观流动来源 + 尚未释放完的新闻冲击」推动，没有无来源的随机噪声。
+ * 行情节奏：时钟每帧都走，价格与盘口每帧（0.25 秒真实时间）刷新一次，所以盘口是连续变的。
+ * 每一帧的净变动都由「一笔微观流动 + 尚未释放完的新闻冲击」组成，没有无来源的随机噪声。
  */
-export const PRICE_UPDATE_TICKS = 2
+export const PRICE_UPDATE_TICKS = 1
 /** 新闻冲击每帧释放剩余幅度的 25%，几帧内释放完但会留下明显方向 */
 const DRIFT_RELEASE = 0.25
 /** 每条新闻冲击最多存活多少帧行情（超过就清掉，避免长尾一直拖） */
@@ -57,15 +57,15 @@ const PRICE_TAPE_LIMIT = 180
 export const BOOK_MIN_MOVE_BPS = 8
 /** 单条新闻冲击大于这个基点时强制重挂盘口（大消息必须立刻体现在报价上） */
 const FORCED_REBOOK_BPS = 12
-/** 每次行情刷新有多大概率出现一笔微观流动：价格只在有驱动时才动，没有驱动就不动 */
-const FLOW_CHANCE = 0.45
+/** 每次行情刷新有多大概率出现一笔微观流动：几乎每帧都有，但绝大多数是小单，偶尔才有一笔扫单 */
+const FLOW_CHANCE = 0.92
 /** 佣金按成交额的 5 个基点/边计（真实股票佣金量级），不会吃掉正常点差利润 */
 export const COMMISSION_RATE = 0.0005
 /** 销售/做市台的总持有资金上限 */
 export const STARTING_CASH = 20_000_000
-/** 1 根 = 一次行情刷新（0.5 秒真实时间 ≈ 97.5 模拟秒），1 个交易日正好 240 根 */
-export const CHART_POINTS = 240
-const HISTORY_POINTS = 240
+/** 1 根 = 一次行情刷新（0.25 秒真实时间 ≈ 48.75 模拟秒），1 个交易日正好 480 根 */
+export const CHART_POINTS = 480
+const HISTORY_POINTS = 480
 const MAX_DISPATCH = 3
 const MAX_QUOTES = 14
 const DISPATCH_INTERVAL = 6000
@@ -493,7 +493,7 @@ export function stepSession(state: SimulationState): SimulationState {
     }
   }
 
-  /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（0.5 秒）才刷新一次 */
+  /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（0.25 秒）刷新一次 */
   const priceDue = tick - state.lastPriceTick >= PRICE_UPDATE_TICKS
   let priceTape = state.priceTape
   const instruments = priceDue
@@ -519,7 +519,7 @@ export function stepSession(state: SimulationState): SimulationState {
           if (ttl > 0 && remaining >= 0.5) impulses.push({ ...impulse, bps: remaining, ttl })
         }
 
-        /* 本帧的微观流动来源：不是每一帧都有成交，但只要有价格变动就一定有来源 */
+        /* 本帧的微观流动来源：绝大多数帧都有成交（多为小单、偶尔扫单），只要有价格变动就一定有来源 */
         const [chanceRoll, afterChance] = nextRandom(rng)
         rng = afterChance
         let flowDriver: PriceDriver | null = null
@@ -535,7 +535,7 @@ export function stepSession(state: SimulationState): SimulationState {
           flowDriver = {
             label: event.label,
             direction: flowDirection,
-            bps: round2(event.bps * (0.7 + sizeRoll * 0.8) * scale),
+            bps: round2(event.bps * (0.6 + sizeRoll * 1.0 + 2.4 * Math.pow(sizeRoll, 8)) * scale),
             source: 'flow',
             hint: event.hint,
           }
