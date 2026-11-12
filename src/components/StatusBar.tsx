@@ -18,14 +18,16 @@ export default function StatusBar({ meta, onTogglePause, onCycleSpeed }: StatusB
       <div className="statusbar__group">
         <span className={`statusbar__dot statusbar__dot--${dotTone[meta.status]}`} aria-hidden="true" />
         <span className="statusbar__status">{meta.status}</span>
-        <button
-          type="button"
-          className="statusbar__btn statusbar__btn--strong"
-          onClick={onTogglePause}
-          title="Pause or resume the simulated clock"
-        >
-          {meta.status === 'RUNNING' ? 'PAUSE' : meta.status === 'PAUSED' ? 'RESUME' : 'CLOSED'}
-        </button>
+        {meta.status !== 'CLOSED' && (
+          <button
+            type="button"
+            className="statusbar__btn statusbar__btn--strong"
+            onClick={onTogglePause}
+            title="Pause or resume the simulated clock"
+          >
+            {meta.status === 'RUNNING' ? 'PAUSE' : 'RESUME'}
+          </button>
+        )}
         <span className="statusbar__clock">SIM {meta.clock}</span>
       </div>
       <div className="statusbar__group">

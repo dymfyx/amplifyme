@@ -67,7 +67,7 @@ export default function ScoreDrawer({ score, onClose }: ScoreDrawerProps) {
         </ul>
 
         <p className="drawer__note">
-          Provisional read — the full breakdown unlocks when the session ends. Press ESC to close.
+          Live read from this session's decision telemetry — every quote, fill and headline response feeds it. Press ESC to close.
         </p>
       </aside>
     </div>

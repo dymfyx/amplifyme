@@ -375,3 +375,52 @@ P0 已交付：
 - `RESTART` 会**沿用同一份初始仓位**、换新种子重开；`EXIT DESK` 回到角色选择，重新配置。
 - 深链 `#sales` / `#market-maker` 跳过设置页，直接空仓开台（方便截图与分享）。
 - 测试：引擎 3 例（初始仓位写入、非法行过滤、carried 仓位 mark-to-market）+ UI 4 例（默认平仓、自定义仓位带入且不动现金、RESTART 重放初始仓位、返回角色选择）。
+
+## 15. P2：决策遥测 → 实时评分 → 结算报告
+
+### 15.1 动机
+
+评分抽屉此前是 `src/data/mock.ts` 里的死数据（composite 72 / P62）。P2 把它换成从本局真实决策里算出来的分数，
+并在 15 个交易日跑完时给出结算报告。
+
+### 15.2 遥测层 `src/engine/telemetry.ts`
+
+| 记录 | 字段 | 写入时机 |
+|---|---|---|
+| `QuoteRecord` | `id/symbol/tick/ourSpread/marketSpread/responseTicks/rfqId` | `sendQuote` 成功时（`responseTicks` 由 RFQ 创建 tick 差算出，手工报价为 `null`） |
+| `FillRecord` | `id/symbol/side/qty/price/mid/edge/notional/fee/tick` | 报价成交或 `fillClientOrder` 成功时（`edge` = 买入 `mid-price`、卖出 `price-mid`） |
+| `ExposureSample` | `tick/gross/net/pnl` | 每个 tick（`EXPOSURE_LIMIT = 480` 滚动窗口） |
+| `NewsReaction` | `id/tick/traded` | 头条入库；20 tick 内有成交则标记 `traded` |
+
+维护 `peakPnl` 与 `maxDrawdown`；各数组有上限（报价/成交 240、敞口 480、新闻 24），内存不随 30 分钟线性增长。
+
+### 15.3 评分口径 `src/engine/scoring.ts`
+
+| 维度 | 公式 | 无数据时 |
+|---|---|---|
+| `RETURNS` | `50 + 50·tanh(total/20_000)` | 50 |
+| `DISCIPLINE` | `100·exp(-|ln(avgQuoteWidth/marketWidth/1.6)|) - declineRate·25` | 50（没报过价） |
+| `REACTION` | `100 - 2.5·median(responseTicks)` | 50（没回应过派单） |
+| `RESILIENCE` | `100 - 30·maxDrawdown/$20M` | 50（没持仓过） |
+| `TRADE MANAGEMENT` | `100 - 400·avgGrossExposure/$20M` | 50（没持仓过） |
+| `ADAPTABILITY` | `35 + 65·(headlinesTradedInto/headlines)` | 50（没新闻） |
+
+权重 25/20/15/15/15/10，`percentile = clamp(5 + composite·0.9, 1, 99)`。**空局六维全 50** —— 什么都不做拿不到高分，
+这是刻意的（否则"不交易"会被算成满分纪律）。
+
+### 15.4 界面
+
+- `ScoreDrawer` 从 `scoreSession(state)` 取数，副标题写明"实时读本局遥测"，两列紧凑布局。
+- 收盘时 `Terminal` 自动弹 `SettlementReport`：hero 是 TOTAL P&L 拆解；FLOW（成交数、hit ratio、平均/最好/最差 edge、
+  报价数、报价宽度 vs 市场）；RISK & RESPONSE（peak P&L、max drawdown、平均 gross、收盘净敞口、中位响应、头条响应率）；
+  评分区（composite、percentile、六维 meter）；底部一行 coaching（挑最强项与最弱项给建议）。
+- 状态栏收盘时钉在 `16:00:00`（`formatClock` 在 15 天边界会回绕成 09:30:00），并隐藏 PAUSE 按钮避免出现 `CLOSED CLOSED`。
+
+### 15.5 行情节奏与费率修正
+
+- `PRICE_UPDATE_TICKS` 4 → **2**（0.5 秒一跳），新增 `PRICE_VOL_PER_UPDATE = √½`，单步幅度降 ~29%，`CHART_POINTS`/`HISTORY_POINTS`
+  240（1 根 ≈ 97.5 模拟秒，一个交易日 240 根）。
+- `COMMISSION_RATE` 0.005 → **0.0005**。原 50bps/边 下，`BUY 2,000 @803.22 → SELL 2,000 @810.78` 毛利 15,120 被 16,140
+  的佣金吃成 −1,020；5bps 下同一笔来回净赚约 13,506。
+- 测试：`src/engine/scoring.test.ts` 10 例（遥测记录、edge 方向、结算统计、空局中性、六维边界、盈利/亏损局 returns 对照），
+  `simulation.test.ts` 增现金/节奏/收盘断言，总计 69 例全绿。

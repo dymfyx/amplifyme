@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
+import StatusBar from '../components/StatusBar'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -177,7 +178,7 @@ describe('terminal shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SCORE' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('COMPOSITE')).toBeInTheDocument()
-    expect(screen.getByText('Discipline')).toBeInTheDocument()
+    expect(screen.getByText('DISCIPLINE')).toBeInTheDocument()
   })
 
   it('closes the scorecard on escape', () => {
@@ -241,5 +242,34 @@ describe('tickets', () => {
     fireEvent.click(screen.getByRole('button', { name: /POSITIONS/ }))
     expect(screen.getByText('Flat — no open positions in this session')).toBeInTheDocument()
     expect(screen.getByText('$20,000,000.00')).toBeInTheDocument()
+  })
+})
+
+describe('status bar at the close', () => {
+  it('pins the clock to the close and hides the pause control once the session is over', () => {
+    let toggled = false
+    render(
+      <StatusBar
+        meta={{
+          clock: '16:00:00',
+          dayIndex: 15,
+          totalDays: 15,
+          status: 'CLOSED',
+          speed: 1,
+          latencyMs: 3,
+          seed: 424242,
+        }}
+        onTogglePause={() => {
+          toggled = true
+        }}
+        onCycleSpeed={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('CLOSED')).toBeInTheDocument()
+    expect(screen.getByText('SIM 16:00:00')).toBeInTheDocument()
+    expect(screen.getByText('DAY 15/15')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument()
+    expect(toggled).toBe(false)
   })
 })

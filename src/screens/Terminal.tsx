@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { Role } from '../types'
-import { scoreCard } from '../data/mock'
 import {
   STARTING_CASH,
   createSession,
@@ -16,6 +15,7 @@ import {
   type OpeningPosition,
   type QuoteInput,
 } from '../engine/simulation'
+import { coachingLine, scoreSession, selectSettlement } from '../engine/scoring'
 import { useSimulation } from '../hooks/useSimulation'
 import BookPanel from '../components/BookPanel'
 import ChartPanel from '../components/ChartPanel'
@@ -24,6 +24,7 @@ import EventFeed from '../components/EventFeed'
 import MarketWatch from '../components/MarketWatch'
 import PositionsPanel from '../components/PositionsPanel'
 import ScoreDrawer from '../components/ScoreDrawer'
+import SettlementReport from '../components/SettlementReport'
 import StatusBar from '../components/StatusBar'
 import TopBar from '../components/TopBar'
 import TradeTicket from '../components/TradeTicket'
@@ -42,6 +43,7 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
   const [selected, setSelected] = useState('AZN')
   const [activeRfqId, setActiveRfqId] = useState<string | null>('RFQ-201')
   const [scoreOpen, setScoreOpen] = useState(false)
+  const [reportDismissed, setReportDismissed] = useState(false)
 
   const instruments = selectInstruments(state)
   const instrument = instruments.find((item) => item.symbol === selected) ?? instruments[0]
@@ -54,6 +56,9 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
   const activeRfq = rfqs.find((item) => item.id === activeRfqId)
   const meta = selectSessionMeta(state, simulation.latencyMs)
   const cash = selectCash(state)
+  const score = scoreSession(state)
+  const settlement = selectSettlement(state)
+  const closed = state.status === 'CLOSED'
 
   const selectRfq = (id: string) => {
     setActiveRfqId(id)
@@ -66,6 +71,7 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
     setSelected('AZN')
     setActiveRfqId('RFQ-201')
     setScoreOpen(false)
+    setReportDismissed(false)
     simulation.restart()
   }
 
@@ -133,16 +139,32 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
 
         <aside className="rail rail--right">
           <EventFeed news={state.news} />
-          <button type="button" className="score-teaser" onClick={() => setScoreOpen(true)}>
-            <span className="score-teaser__label">SESSION SCORECARD</span>
-            <span className="score-teaser__hint">Hidden during the session · click to reveal</span>
+          <button
+            type="button"
+            className="score-teaser"
+            onClick={() => (closed ? setReportDismissed(false) : setScoreOpen(true))}
+          >
+            <span className="score-teaser__label">{closed ? 'SESSION COMPLETE' : 'SESSION SCORECARD'}</span>
+            <span className="score-teaser__hint">
+              {closed ? 'Open the settlement report' : 'Hidden during the session · click to reveal'}
+            </span>
           </button>
         </aside>
       </main>
 
       <StatusBar meta={meta} onTogglePause={simulation.togglePause} onCycleSpeed={simulation.cycleSpeed} />
 
-      {scoreOpen ? <ScoreDrawer score={scoreCard} onClose={() => setScoreOpen(false)} /> : null}
+      {scoreOpen ? <ScoreDrawer score={score} onClose={() => setScoreOpen(false)} /> : null}
+      {closed && !reportDismissed ? (
+        <SettlementReport
+          desk={role === 'sales' ? 'SALES DESK' : 'MARKET MAKING DESK'}
+          stats={settlement}
+          score={score}
+          coaching={coachingLine(state)}
+          onRestart={handleRestart}
+          onClose={() => setReportDismissed(true)}
+        />
+      ) : null}
     </div>
   )
 }

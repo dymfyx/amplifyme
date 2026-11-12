@@ -73,11 +73,13 @@ A 250 ms tick is not a price update. The tape refreshes on a slower cadence so t
 
 | Knob | Value | Meaning |
 |---|---|---|
-| `PRICE_UPDATE_TICKS` | 4 | Prices move **once per second**; the ticks in between only advance the clock |
+| `PRICE_UPDATE_TICKS` | 2 | Prices move **twice a second**; the ticks in between only advance the clock |
+| `PRICE_VOL_PER_UPDATE` | `√½` | Each update moves ~29% less than a full tick, so the tape is finer without becoming more volatile |
 | `BOOK_MIN_MOVE_BPS` | 8 | The five-level book is only rebuilt once the mid has moved 8 bps (0.08%); headlines and jumps force a rebuild |
 
-Each price update appends one point to the chart series, so the `30M / 2H / 6H / 1D` ranges read as 195-second
-bars. Order sizes are carried over with a ±30% jitter between rebuilds instead of being re-drawn from scratch.
+Each price update appends one point to the chart series, so the `30M / 2H / 6H / 1D` ranges read as
+97.5-second bars (240 bars per trading day). Order sizes are carried over with a ±30% jitter between
+rebuilds instead of being re-drawn from scratch.
 
 Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
 stale price by accident.
@@ -88,17 +90,43 @@ stale price by accident.
 random seed (`100000`-`999999`), shown as `SEED` in the status bar; `RESTART` in the top bar starts a fresh one.
 Same seed → same path; new session → different market.
 
-Every session — first load and every `RESTART` — opens **flat**: no positions, no orders, no trades, zero
-commission and zero realised P&L, with the full $20M cash budget. Only the market path changes with the seed.
+Every session — first load and every `RESTART` — opens with the book you chose in the setup screen (flat by
+default): no orders, no trades, zero commission and zero realised P&L, with the full $20M cash budget. Only the
+market path changes with the seed.
 
 ### Cash budget
 
 The desk starts with **$20,000,000** of cash (`STARTING_CASH`, shown as `CASH` in the P&L strip and
-`AVAILABLE CASH` in the ticket). Buys are settled in cash and charged 0.5% commission:
+`AVAILABLE CASH` in the ticket). Buys are settled in cash and charged 5 bps commission (`COMMISSION_RATE`,
+0.05% per side):
 
 - a client order that costs more than the remaining cash is rejected (`ORDER REJECTED · insufficient cash …`),
 - a bid the desk could not settle is rejected too (`QUOTE REJECTED · buying N would exceed the cash budget`),
 - sells credit cash, so the desk can trade its way back out of a tight book.
+
+## Scoring and settlement
+
+Nothing here is mock data any more. Every quote, fill, decline and headline writes a record into
+`src/engine/telemetry.ts`, and `src/engine/scoring.ts` turns that trace into the scorecard and the end-of-session
+report.
+
+| Dimension | What it measures | How it is computed |
+|---|---|---|
+| `RETURNS` | Money made | `50 + 50·tanh(total P&L / $20k)` |
+| `DISCIPLINE` | Quoting inside the market | Penalises quotes far from ~1.6× the market spread and RFQs declined; neutral (50) if you never quote |
+| `REACTION` | Speed on dispatched RFQs | `100 − 2.5 × median response ticks`; neutral if you never answer |
+| `RESILIENCE` | Drawdown control | `100 − 30 × (max drawdown / $20M)` while you carry risk |
+| `TRADE MANAGEMENT` | Size of open risk | `100 − 400 × (average gross exposure / $20M)` |
+| `ADAPTABILITY` | Reacting to headlines | `35 + 65 × (headlines traded into / headlines)` inside a 20-tick window |
+
+`COMPOSITE` weights them 25 / 20 / 15 / 15 / 15 / 10 and maps it to a percentile. A never-traded session scores
+50 everywhere — doing nothing is not a high score.
+
+The `SCORE` button opens a live drawer with the same numbers during the session. When the 15 days run out the
+clock stops at `16:00:00`, and a **settlement report** opens: total P&L breakdown, flow stats (fills, hit ratio,
+average edge vs the mid, quotes sent, quote width vs market), risk stats (peak P&L, max drawdown, average gross
+exposure, median RFQ response, headlines traded) and the scorecard with a one-line coaching note. `RUN ANOTHER
+SESSION` restarts with a fresh seed; `REVIEW THE DESK` closes the report to inspect the tape.
 
 ## Desktop shortcut
 
@@ -133,9 +161,11 @@ src/
     rng.ts              seeded PRNG helpers (state-in / state-out)
     scenario.ts         universe, headline templates, client roster
     simulation.ts       session state machine: clock, walk, book, quotes, fills, P&L
+    telemetry.ts        decision trace: quotes, fills, declines, exposure, drawdown, headline responses
+    scoring.ts          six-dimension scorecard + settlement stats + coaching line
   hooks/
     useSimulation.ts    drives the engine on a 250 ms interval, exposes actions
-  data/mock.ts          seed positions/orders/trades, news copy, scorecard copy
+
   screens/
     RoleSelect.tsx      desk selection screen
     SessionSetup.tsx    opening book: flat or carry inventory
@@ -149,7 +179,8 @@ src/
     ChartPanel.tsx      SVG price chart with event markers and volume
     PositionsPanel.tsx  BOOK tabs: positions / orders / trades
     EventFeed.tsx       news feed with tag and impact
-    ScoreDrawer.tsx     hidden scorecard drawer
+    ScoreDrawer.tsx     hidden live scorecard drawer
+    SettlementReport.tsx end-of-session report: P&L, flow, risk, score, coaching
     StatusBar.tsx       sim clock, day counter, seed, session state
     PanelHeader.tsx     shared numbered panel header
   styles.css            design tokens + terminal layout
@@ -167,15 +198,16 @@ docs/ui-proposal.md     layout proposal, decisions and roadmap
 
 ## Status
 
-**P1 complete** — live clock, paced tick stream, event shocks, quote/order fills, cash settlement and
-mark-to-market P&L all run off the simulation engine. Scoring is still a placeholder card.
+**P2 complete** — live clock, paced tick stream, event shocks, quote/order fills, cash settlement and
+mark-to-market P&L all run off the simulation engine, and the scorecard plus end-of-session report are computed
+from the decision telemetry (no placeholder numbers left in the app).
 
 | Phase | Scope |
 |---|---|
 | P0 (done) | Static shell, role selection, all panels on mock data |
 | P1 (done) | Clock control, tick stream, quotes/orders, fills, mark-to-market P&L |
-| P2 | Live scoring off decision telemetry, settlement report, replay |
-| P3 | Polish: sounds, resizable panels, session save/restore |
+| P2 (done) | Decision telemetry -> live scorecard + settlement report, 5 bps commission, 0.5 s tape |
+| P3 | Polish: replay, sounds, resizable panels, session save/restore |
 
 ## Working rules
 

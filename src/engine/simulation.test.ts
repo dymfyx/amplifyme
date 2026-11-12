@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMMISSION_RATE,
   DAY_SECONDS,
   PRICE_UPDATE_TICKS,
   SESSION_SECONDS,
@@ -14,6 +15,7 @@ import {
   selectChartMarkers,
   selectPnl,
   selectPositions,
+  selectSessionMeta,
   sendQuote,
   setSpeed,
   stepSession,
@@ -55,6 +57,8 @@ describe('simulation clock', () => {
     let state = atEndOfSession(session())
     state = stepSession(state)
     expect(state.status).toBe('CLOSED')
+    expect(selectSessionMeta(state).clock).toBe('16:00:00')
+    expect(selectSessionMeta(state).dayIndex).toBe(15)
     const frozen = stepSession(state)
     expect(frozen).toBe(state)
   })
@@ -101,7 +105,8 @@ describe('market data', () => {
     const moved = advanceSession(session(), PRICE_UPDATE_TICKS)
     const after = moved.instruments.find((instrument) => instrument.symbol === 'AZN')
     expect(after?.lastMove).not.toBe(0)
-    expect(after?.series).toHaveLength((fresh?.series.length ?? 0) + 1)
+    const cap = 240
+    expect(after?.series).toHaveLength(Math.min((fresh?.series.length ?? 0) + 1, cap))
   })
 
   it('keeps the same seed reproducible and labels the session with it', () => {
@@ -201,7 +206,7 @@ describe('player actions', () => {
     expect(result.message).toContain('FILLED · BUY 1,000 AZN')
     expect(azn?.netQty).toBe(1000)
     expect(azn?.avgPrice).toBe(800)
-    expect(result.state.commission).toBeCloseTo(1000 * 800 * 0.005, 2)
+    expect(result.state.commission).toBeCloseTo(1000 * 800 * COMMISSION_RATE, 2)
     expect(result.state.trades[0].symbol).toBe('AZN')
     expect(result.state.dispatch.some((rfq) => rfq.id === 'RFQ-201')).toBe(false)
   })
@@ -265,7 +270,7 @@ describe('cash budget', () => {
       qty: 1000,
       price: 800,
     })
-    const fee = 1000 * 800 * 0.005
+    const fee = 1000 * 800 * COMMISSION_RATE
     expect(bought.state.cash).toBeCloseTo(STARTING_CASH - 1000 * 800 - fee, 2)
 
     const sold = fillClientOrder(session(), {

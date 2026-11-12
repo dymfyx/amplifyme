@@ -13,6 +13,16 @@ import type {
 } from '../types'
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
 import { CLIENTS, DISPATCH_NOTES, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
+import {
+  createTelemetry,
+  recordDecline,
+  recordFill,
+  recordNews,
+  recordQuote,
+  recordRfq,
+  sampleExposure,
+  type Telemetry,
+} from './telemetry'
 
 /**
  * 可推进的模拟市场引擎。
@@ -31,17 +41,20 @@ export const SESSION_SECONDS = DAY_SECONDS * SESSION_DAYS
 export const START_SECONDS = 9 * 3600 + 30 * 60
 export const SIM_SECONDS_PER_TICK = SESSION_SECONDS / ((30 * 60 * 1000) / TICK_MS)
 /**
- * 行情节奏：时钟每帧都走，但价格与盘口每 4 帧（1 秒真实时间）才刷新一次，
- * 否则一屏数字每秒抖 4 下，盘口挂单根本看不清。
+ * 行情节奏：时钟每帧都走，但价格与盘口每 2 帧（0.5 秒真实时间）才刷新一次。
+ * 单次幅度乘 1/√2：同样长度的行情波动，但每次跳得更细，看起来更像真实盘口。
  */
-export const PRICE_UPDATE_TICKS = 4
+export const PRICE_UPDATE_TICKS = 2
+export const PRICE_VOL_PER_UPDATE = Math.SQRT1_2
 /** 只有当价格相对上次建簿的位置移动超过这个基点，才重建盘口 */
 export const BOOK_MIN_MOVE_BPS = 8
-export const COMMISSION_RATE = 0.005
+/** 佣金按成交额的 5 个基点/边计（真实股票佣金量级），不会吃掉正常点差利润 */
+export const COMMISSION_RATE = 0.0005
 /** 销售/做市台的总持有资金上限 */
 export const STARTING_CASH = 20_000_000
-export const CHART_POINTS = 120
-const HISTORY_POINTS = 60
+/** 1 根 = 一次行情刷新（0.5 秒真实时间 ≈ 97.5 模拟秒），1 个交易日正好 240 根 */
+export const CHART_POINTS = 240
+const HISTORY_POINTS = 240
 const MAX_DISPATCH = 3
 const MAX_QUOTES = 14
 const DISPATCH_INTERVAL = 6000
@@ -131,6 +144,8 @@ export interface SimulationState {
   cash: number
   nextDispatchAt: number
   counters: { rfq: number; quote: number; order: number; trade: number }
+  /** 决策遥测：报价/成交/回撤/新闻响应，评分与结算报告的数据源 */
+  telemetry: Telemetry
 }
 
 export interface SessionMeta {
@@ -306,7 +321,41 @@ export function createSession(seed = randomSeed(), openingBook: OpeningPosition[
     cash: STARTING_CASH,
     nextDispatchAt: START_SECONDS + 900,
     counters: { rfq: 201, quote: 118, order: 1043, trade: 8841 },
+    telemetry: recordRfq(createTelemetry()),
   }
+}
+
+/** 按最新价格把持仓 mark-to-market：敞口、净额和总 P&L（已实现 + 未实现 − 佣金） */
+function markToMarket(positions: EnginePosition[], instruments: InstrumentState[], commission: number) {
+  let realised = 0
+  let unrealised = 0
+  let gross = 0
+  let net = 0
+  for (const position of positions) {
+    const instrument = instruments.find((item) => item.symbol === position.symbol)
+    const last = instrument?.last ?? position.avgPrice
+    realised += position.realised
+    unrealised += position.netQty * (last - position.avgPrice)
+    const value = position.netQty * last
+    gross += Math.abs(value)
+    net += value
+  }
+  return {
+    gross: round2(gross),
+    net: round2(net),
+    pnl: round2(realised + unrealised - commission),
+  }
+}
+
+/** 盘口中间价，用来衡量成交是否占到了点差 */
+function bookMid(book: Book): number {
+  const bid = book.bids[0]?.price ?? 0
+  const ask = book.asks[0]?.price ?? bid
+  return round2((bid + ask) / 2)
+}
+
+function bookOf(instruments: InstrumentState[], symbol: string): Book {
+  return instruments.find((item) => item.symbol === symbol)?.book ?? { bids: [], asks: [] }
 }
 
 /* ------------------------------------------------------------------ */
@@ -319,6 +368,7 @@ export function stepSession(state: SimulationState): SimulationState {
   const tick = state.tick + 1
   const simSeconds = state.simSeconds + SIM_SECONDS_PER_TICK
   let rng = state.rng
+  let telemetry = state.telemetry
 
   /* 1. 到达的新闻与冲击 */
   const due = state.pendingNews.filter((item) => item.at <= simSeconds)
@@ -332,6 +382,9 @@ export function stepSession(state: SimulationState): SimulationState {
     headline: item.headline,
   }))
   const news = revealed.length === 0 ? state.news : [...state.news, ...revealed]
+  for (const item of revealed) {
+    telemetry = recordNews(telemetry, item.id, tick)
+  }
   const revealedEvents: ChartEvent[] = due.map((item) =>
     item.symbol ? { tick, label: item.symbol, symbol: item.symbol } : { tick, label: 'MACRO' },
   )
@@ -362,12 +415,13 @@ export function stepSession(state: SimulationState): SimulationState {
         if (jumpRoll < 0.012) {
           const [extreme, afterExtreme] = normalish(rng)
           rng = afterExtreme
-          jump = extreme * instrument.sigma * 6
+          jump = extreme * instrument.sigma * PRICE_VOL_PER_UPDATE * 6
         }
         /* 宏观冲击按个股波动率（beta）放大：高波动名字对同一条新闻反应更大 */
         const beta = Math.min(1.6, Math.max(0.6, instrument.sigma / 0.0018))
         const shock = (shocks.get(instrument.symbol) ?? 0) * beta
-        const next = Math.max(0.01, instrument.last * (1 + move * instrument.sigma + jump + shock))
+        const step = instrument.sigma * PRICE_VOL_PER_UPDATE
+        const next = Math.max(0.01, instrument.last * (1 + move * step + jump + shock))
         const last = round2(next)
 
         /* 盘口只在价格相对上次挂单的位置明显移动（或遇到新闻/跳价）时才重挂 */
@@ -467,6 +521,19 @@ export function stepSession(state: SimulationState): SimulationState {
     }
     trades = [filledTrade, ...trades].slice(0, 20)
     orders = [filledOrder, ...orders].slice(0, 20)
+    const fillMid = bookMid(bookOf(instruments, quote.symbol))
+    telemetry = recordFill(telemetry, {
+      id: filledTrade.id,
+      symbol: quote.symbol,
+      side: ourSide,
+      qty: quote.qty,
+      price,
+      mid: fillMid,
+      edge: round2(ourSide === 'BUY' ? fillMid - price : price - fillMid),
+      notional: round2(gross),
+      fee,
+      tick,
+    })
     if (quote.rfqId) {
       dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
     }
@@ -489,6 +556,7 @@ export function stepSession(state: SimulationState): SimulationState {
     rng = afterUnits
     const rfqCounter = counters.rfq + 1
     counters = { ...counters, rfq: rfqCounter }
+    telemetry = recordRfq(telemetry)
     dispatch = [
       ...dispatch,
       {
@@ -505,7 +573,11 @@ export function stepSession(state: SimulationState): SimulationState {
     nextDispatchAt = simSeconds + DISPATCH_INTERVAL
   }
 
-  /* 5. 会话结束 */
+  /* 5. 遥测采样：每帧记一次敞口与 P&L，维护峰值/最大回撤 */
+  const marked = markToMarket(positions, instruments, commission)
+  telemetry = sampleExposure(telemetry, { tick, gross: marked.gross, net: marked.net, pnl: marked.pnl })
+
+  /* 6. 会话结束 */
   const status: SessionStatus = simSeconds - state.startedAt >= SESSION_SECONDS ? 'CLOSED' : 'RUNNING'
 
   return {
@@ -528,6 +600,7 @@ export function stepSession(state: SimulationState): SimulationState {
     cash,
     nextDispatchAt,
     counters,
+    telemetry,
   }
 }
 
@@ -641,10 +714,26 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     fillInTicks: fillDelay,
     rfqId: rfq?.id,
   }
+  const marketBook = state.instruments.find((item) => item.symbol === input.symbol)?.book
+  const liveSpread = marketBook ? round2(marketBook.asks[0].price - marketBook.bids[0].price) : 0
+  const responseTicks = rfq
+    ? Math.max(0, Math.round((state.simSeconds - rfq.createdAt) / SIM_SECONDS_PER_TICK))
+    : null
+  const telemetry = recordQuote(state.telemetry, {
+    id: quote.id,
+    symbol: quote.symbol,
+    tick: state.tick,
+    ourSpread: round2(quote.offer - quote.bid),
+    marketSpread: liveSpread,
+    responseTicks,
+    rfqId: rfq?.id,
+  })
+
   return {
     state: {
       ...state,
       rng,
+      telemetry,
       quotes: [...state.quotes, quote].slice(-MAX_QUOTES),
       counters: { ...state.counters, quote: counter },
     },
@@ -693,10 +782,24 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     price: round2(input.price),
     fee,
   }
+  const mid = bookMid(bookOf(state.instruments, input.symbol))
+  const telemetry = recordFill(state.telemetry, {
+    id: trade.id,
+    symbol: input.symbol,
+    side: ourSide,
+    qty: input.qty,
+    price: round2(input.price),
+    mid,
+    edge: round2(ourSide === 'BUY' ? mid - input.price : input.price - mid),
+    notional: round2(gross),
+    fee,
+    tick: state.tick,
+  })
   return {
     state: {
       ...state,
       positions,
+      telemetry,
       commission: round2(state.commission + fee),
       orders: [order, ...state.orders].slice(0, 20),
       trades: [trade, ...state.trades].slice(0, 20),
@@ -714,7 +817,11 @@ export function declineDispatch(state: SimulationState, rfqId: string): ActionRe
   const rfq = state.dispatch.find((item) => item.id === rfqId)
   if (!rfq) return { state, message: 'DISPATCH NOT FOUND' }
   return {
-    state: { ...state, dispatch: state.dispatch.filter((item) => item.id !== rfqId) },
+    state: {
+      ...state,
+      dispatch: state.dispatch.filter((item) => item.id !== rfqId),
+      telemetry: recordDecline(state.telemetry),
+    },
     message: `DISPATCH DECLINED · ${rfq.id} ${rfq.client}`,
   }
 }
@@ -813,7 +920,9 @@ export function selectCash(state: SimulationState): number {
 
 export function selectSessionMeta(state: SimulationState, latencyMs = 0): SessionMeta {
   return {
-    clock: formatClock(state.simSeconds),
+    // 收盘时刻 simSeconds 正好停在 15 个交易日的边界上，formatClock 会回绕成 09:30:00，
+    // 所以结束态直接钉在最后一天的收盘时间。
+    clock: state.status === 'CLOSED' ? '16:00:00' : formatClock(state.simSeconds),
     dayIndex: dayIndexAt(state.simSeconds),
     totalDays: SESSION_DAYS,
     status: state.status,
