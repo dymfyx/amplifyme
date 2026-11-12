@@ -35,7 +35,7 @@ npm run preview  # serve the production build
 The terminal switches its central ticket by role:
 
 - **Market Maker** → `QUOTE TICKET` (two-way bid/offer, size, validity)
-- **Sales** → `CLIENT ORDER` (client, side, quantity, limit price)
+- **Sales** → CLIENT ORDER (client, side, quantity, limit price) with a RECENT FILLS tape underneath
 
 The scorecard is hidden while you trade. Press `SCORE` in the top bar (or the teaser under the event feed) to
 reveal it in a drawer; `ESC` or a click on the backdrop closes it.

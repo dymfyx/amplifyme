@@ -105,6 +105,7 @@ export default function Terminal({ role, onExit }: TerminalProps) {
             book={book}
             rfq={activeRfq}
             quotes={state.quotes}
+            recentFills={state.trades}
             onQuote={handleQuote}
             onFill={handleFill}
             onDecline={handleDecline}

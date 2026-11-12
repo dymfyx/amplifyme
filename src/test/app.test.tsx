@@ -157,6 +157,6 @@ describe('tickets', () => {
     fireEvent.click(screen.getByRole('button', { name: /ORDERS/ }))
     expect(screen.getByText('ORD-1042')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /TRADES/ }))
-    expect(screen.getByText('TRD-8841')).toBeInTheDocument()
+    expect(screen.getAllByText('TRD-8841').length).toBeGreaterThan(0)
   })
 })

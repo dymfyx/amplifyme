@@ -355,7 +355,7 @@ P0 已交付：
 - `StatusBar` 增加 `PAUSE/RESUME`、`SPEED 1x/2x/4x`，状态圆点随 RUNNING/PAUSED/CLOSED 变色；快捷键 `SPACE` 暂停、`1/2/4` 调速度。
 - `MarketWatch` 每 tick 用 `lastMove` 闪烁涨跌底色；`ChartPanel` 周期按钮真实切片最近 N 个 tick（1M/5M/15M/30M/1H/ALL），成交量柱按 `maxVolume` 归一，事件竖线随头条推进出现。
 - `EventFeed` 新头条自动滚到底部；`PositionsPanel` 显示实时 `UNREALISED P&L`。
-- `TradeTicket`：报价/限价在未手工编辑前**跟随实时盘口**，避免挂出被行情甩开的价；报价列表分 `LIVE` / `OLD` 两个 Tab，状态随 tick 变 `FILLED` / `EXPIRED`。
+- `TradeTicket`：报价/限价在未手工编辑前**跟随实时盘口**，避免挂出被行情甩开的价；MM 下方是 `LIVE` / `OLD` 报价 Tab，状态随 tick 变 `FILLED` / `EXPIRED`；Sales 下方改为 `RECENT FILLS`（时间/标的/方向/数量/价格/费用/成交号）。
 
 ### 13.4 测试
 

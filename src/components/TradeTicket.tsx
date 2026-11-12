@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Book, Instrument, QuoteRow, Rfq, Role, Side } from '../types'
+import type { Book, Instrument, QuoteRow, Rfq, Role, Side, TradeRow } from '../types'
 import type { FillInput, QuoteInput } from '../engine/simulation'
 import PanelHeader from './PanelHeader'
 
@@ -14,6 +14,7 @@ interface TradeTicketProps {
   book: Book
   rfq: Rfq | undefined
   quotes: QuoteRow[]
+  recentFills: TradeRow[]
   onQuote: (input: QuoteInput) => string
   onFill: (input: FillInput) => string
   onDecline: () => string
@@ -25,6 +26,7 @@ export default function TradeTicket({
   book,
   rfq,
   quotes,
+  recentFills,
   onQuote,
   onFill,
   onDecline,
@@ -238,64 +240,112 @@ export default function TradeTicket({
         ) : null}
       </div>
 
-      <div className="tabs">
-        <button
-          type="button"
-          className={tab === 'live' ? 'tab tab--on' : 'tab'}
-          onClick={() => setTab('live')}
-          aria-pressed={tab === 'live'}
-        >
-          LIVE QUOTES
-        </button>
-        <button
-          type="button"
-          className={tab === 'old' ? 'tab tab--on' : 'tab'}
-          onClick={() => setTab('old')}
-          aria-pressed={tab === 'old'}
-        >
-          OLD QUOTES
-        </button>
-      </div>
-
-      <div className="table-wrap">
-        <table className="grid grid--quotes">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">SECURITY</th>
-              <th scope="col" className="num">BID VOL</th>
-              <th scope="col" className="num">BID</th>
-              <th scope="col" className="num">OFFER</th>
-              <th scope="col" className="num">OFFER VOL</th>
-              <th scope="col" className="num">VALID FOR</th>
-              <th scope="col">STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((quote) => (
-              <tr key={quote.id} className="row">
-                <td className="muted">{quote.id}</td>
-                <td className="strong">{quote.symbol}</td>
-                <td className="num">{quote.bidVolume.toLocaleString('en-US')}</td>
-                <td className="num num--up">{quote.bid.toFixed(2)}</td>
-                <td className="num num--down">{quote.offer.toFixed(2)}</td>
-                <td className="num">{quote.offerVolume.toLocaleString('en-US')}</td>
-                <td className="num">{quote.validFor}s</td>
-                <td>
-                  <span className={`badge badge--${quote.status.toLowerCase()}`}>{quote.status}</span>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="empty">
-                  {tab === 'live' ? 'No live quotes — send one from the ticket above' : 'No filled or expired quotes yet'}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      {isMaker ? (
+        <>
+          <div className="tabs">
+            <button
+              type="button"
+              className={tab === 'live' ? 'tab tab--on' : 'tab'}
+              onClick={() => setTab('live')}
+              aria-pressed={tab === 'live'}
+            >
+              LIVE QUOTES
+            </button>
+            <button
+              type="button"
+              className={tab === 'old' ? 'tab tab--on' : 'tab'}
+              onClick={() => setTab('old')}
+              aria-pressed={tab === 'old'}
+            >
+              OLD QUOTES
+            </button>
+          </div>
+          <div className="table-wrap">
+            <table className="grid grid--quotes">
+              <thead>
+                <tr>
+                  <th scope="col">ID</th>
+                  <th scope="col">SECURITY</th>
+                  <th scope="col" className="num">BID VOL</th>
+                  <th scope="col" className="num">BID</th>
+                  <th scope="col" className="num">OFFER</th>
+                  <th scope="col" className="num">OFFER VOL</th>
+                  <th scope="col" className="num">VALID FOR</th>
+                  <th scope="col">STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((quote) => (
+                  <tr key={quote.id} className="row">
+                    <td className="muted">{quote.id}</td>
+                    <td className="strong">{quote.symbol}</td>
+                    <td className="num">{quote.bidVolume.toLocaleString('en-US')}</td>
+                    <td className="num num--up">{quote.bid.toFixed(2)}</td>
+                    <td className="num num--down">{quote.offer.toFixed(2)}</td>
+                    <td className="num">{quote.offerVolume.toLocaleString('en-US')}</td>
+                    <td className="num">{quote.validFor}s</td>
+                    <td>
+                      <span className={`badge badge--${quote.status.toLowerCase()}`}>{quote.status}</span>
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="empty">
+                      {tab === 'live'
+                        ? 'No live quotes — send one from the ticket above'
+                        : 'No filled or expired quotes yet'}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="tabs">
+            <button type="button" className="tab tab--on">
+              RECENT FILLS
+            </button>
+          </div>
+          <div className="table-wrap">
+            <table className="grid grid--quotes">
+              <thead>
+                <tr>
+                  <th scope="col">TIME</th>
+                  <th scope="col">SECURITY</th>
+                  <th scope="col">SIDE</th>
+                  <th scope="col" className="num">QTY</th>
+                  <th scope="col" className="num">PRICE</th>
+                  <th scope="col" className="num">FEE</th>
+                  <th scope="col">ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentFills.slice(0, 4).map((fill) => (
+                  <tr key={fill.id} className="row">
+                    <td className="muted">{fill.time}</td>
+                    <td className="strong">{fill.symbol}</td>
+                    <td className={fill.side === 'BUY' ? 'num--up' : 'num--down'}>{fill.side}</td>
+                    <td className="num">{fill.qty.toLocaleString('en-US')}</td>
+                    <td className="num">{fill.price.toFixed(2)}</td>
+                    <td className="num">{fill.fee.toFixed(2)}</td>
+                    <td className="muted">{fill.id}</td>
+                  </tr>
+                ))}
+                {recentFills.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="empty">
+                      No fills yet — the first client order will land here
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </section>
   )
 }
