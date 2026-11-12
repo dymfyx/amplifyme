@@ -76,6 +76,9 @@ stale price by accident.
 random seed (`100000`-`999999`), shown as `SEED` in the status bar; `RESTART` in the top bar starts a fresh one.
 Same seed → same path; new session → different market.
 
+Every session — first load and every `RESTART` — opens **flat**: no positions, no orders, no trades, zero
+commission and zero realised P&L, with the full $20M cash budget. Only the market path changes with the seed.
+
 ### Cash budget
 
 The desk starts with **$20,000,000** of cash (`STARTING_CASH`, shown as `CASH` in the P&L strip and

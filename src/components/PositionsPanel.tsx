@@ -56,6 +56,13 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
               </tr>
             </thead>
             <tbody>
+              {positions.length === 0 && (
+                <tr>
+                  <td className="empty" colSpan={7}>
+                    Flat — no open positions in this session
+                  </td>
+                </tr>
+              )}
               {positions.map((position) => (
                 <tr key={position.symbol} className="row">
                   <td className="strong">{position.symbol}</td>
@@ -91,6 +98,13 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
               </tr>
             </thead>
             <tbody>
+              {orders.length === 0 && (
+                <tr>
+                  <td className="empty" colSpan={7}>
+                    No orders yet — book one from the ticket
+                  </td>
+                </tr>
+              )}
               {orders.map((order) => (
                 <tr key={order.id} className="row">
                   <td className="muted">{order.id}</td>
@@ -122,6 +136,13 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
               </tr>
             </thead>
             <tbody>
+              {trades.length === 0 && (
+                <tr>
+                  <td className="empty" colSpan={7}>
+                    No fills yet in this session
+                  </td>
+                </tr>
+              )}
               {trades.map((trade) => (
                 <tr key={trade.id} className="row">
                   <td className="muted">{trade.id}</td>

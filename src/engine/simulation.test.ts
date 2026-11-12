@@ -35,7 +35,7 @@ describe('simulation clock', () => {
     expect(formatClock(state.simSeconds)).toBe('09:30:00')
     expect(state.instruments).toHaveLength(5)
     expect(state.status).toBe('RUNNING')
-    expect(selectPositions(state).map((position) => position.symbol)).toEqual(['AZN', 'TSLA', 'DUOL'])
+    expect(selectPositions(state)).toEqual([])
   })
 
   it('advances the clock by roughly one simulated minute per tick', () => {
@@ -140,7 +140,14 @@ describe('market data', () => {
 
 describe('positions and pnl', () => {
   it('marks open positions to the live price', () => {
-    const state = advanceSession(session(), 12)
+    const opened = fillClientOrder(session(), {
+      symbol: 'TSLA',
+      clientSide: 'SELL',
+      client: 'AM-18',
+      qty: 1200,
+      price: 196.8,
+    }).state
+    const state = advanceSession(opened, 12)
     const positions = selectPositions(state)
     const tsla = positions.find((position) => position.symbol === 'TSLA')
     const last = state.instruments.find((instrument) => instrument.symbol === 'TSLA')?.last ?? 0
@@ -149,9 +156,17 @@ describe('positions and pnl', () => {
   })
 
   it('computes the desk pnl strip from positions and commission', () => {
-    const state = advanceSession(session(), 5)
+    const opened = fillClientOrder(session(), {
+      symbol: 'AZN',
+      clientSide: 'SELL',
+      client: 'AM-18',
+      qty: 1000,
+      price: 800,
+    }).state
+    const state = advanceSession(opened, 5)
     const pnl = selectPnl(state)
     const positions = selectPositions(state)
+    expect(pnl.commission).toBeGreaterThan(0)
     expect(pnl.realised).toBeCloseTo(positions.reduce((total, position) => total + position.realised, 0), 2)
     expect(pnl.total).toBeCloseTo(pnl.realised + pnl.unrealised - pnl.commission, 2)
   })
@@ -186,7 +201,7 @@ describe('player actions', () => {
     expect(result.message).toContain('FILLED · BUY 1,000 AZN')
     expect(azn?.netQty).toBe(1000)
     expect(azn?.avgPrice).toBe(800)
-    expect(result.state.commission).toBeCloseTo(4015 + 1000 * 800 * 0.005, 2)
+    expect(result.state.commission).toBeCloseTo(1000 * 800 * 0.005, 2)
     expect(result.state.trades[0].symbol).toBe('AZN')
     expect(result.state.dispatch.some((rfq) => rfq.id === 'RFQ-201')).toBe(false)
   })

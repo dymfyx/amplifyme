@@ -169,11 +169,33 @@ describe('tickets', () => {
     expect(screen.getAllByText('1,500').length).toBeGreaterThan(0)
   })
 
-  it('switches the book between positions, orders and trades', () => {
+  it('opens every session flat and fills the book as orders land', () => {
     openDesk('Sales')
+    expect(screen.getByText('Flat — no open positions in this session')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /ORDERS/ }))
-    expect(screen.getByText('ORD-1042')).toBeInTheDocument()
+    expect(screen.getByText('No orders yet — book one from the ticket')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /TRADES/ }))
-    expect(screen.getAllByText('TRD-8841').length).toBeGreaterThan(0)
+    expect(screen.getByText('No fills yet in this session')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
+    expect(screen.getAllByText(/^TRD-\d+$/).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: /ORDERS/ }))
+    expect(screen.getByText(/^ORD-\d+$/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /POSITIONS/ }))
+    expect(screen.getAllByText('AZN').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Flat — no open positions in this session')).not.toBeInTheDocument()
+  })
+
+  it('clears the book when the session is restarted', () => {
+    openDesk('Market Maker')
+    fireEvent.click(screen.getByRole('button', { name: 'SEND QUOTE' }))
+    act(() => {
+      vi.advanceTimersByTime(20000)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'RESTART' }))
+    expect(screen.getByText('SIM 09:30:00')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /POSITIONS/ }))
+    expect(screen.getByText('Flat — no open positions in this session')).toBeInTheDocument()
+    expect(screen.getByText('$20,000,000.00')).toBeInTheDocument()
   })
 })

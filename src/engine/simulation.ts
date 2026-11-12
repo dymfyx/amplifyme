@@ -11,7 +11,6 @@ import type {
   Side,
   TradeRow,
 } from '../types'
-import { orders as seedOrders, positions as seedPositions, trades as seedTrades } from '../data/mock'
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
 import { CLIENTS, DISPATCH_NOTES, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
 
@@ -258,14 +257,10 @@ export function createSession(seed = randomSeed()): SimulationState {
     status: 'RUNNING',
     speed: 1,
     instruments,
-    positions: seedPositions.map((position) => ({
-      symbol: position.symbol,
-      netQty: position.netQty,
-      avgPrice: position.avgPrice,
-      realised: position.realised,
-    })),
-    orders: seedOrders,
-    trades: seedTrades,
+    // 新的一局从空仓开始：持仓、成交、委托、佣金、已实现盈亏都归零，只保留现金预算
+    positions: [],
+    orders: [],
+    trades: [],
     quotes: [],
     dispatch: [initialDispatch()],
     news: [],
@@ -281,7 +276,7 @@ export function createSession(seed = randomSeed()): SimulationState {
       symbol: template.symbol,
     })),
     chartEvents: [],
-    commission: 4015,
+    commission: 0,
     cash: STARTING_CASH,
     nextDispatchAt: START_SECONDS + 900,
     counters: { rfq: 201, quote: 118, order: 1043, trade: 8841 },
