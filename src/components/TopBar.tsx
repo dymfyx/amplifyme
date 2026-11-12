@@ -16,6 +16,8 @@ interface TopBarProps {
   cash: number
   budget: number
   scoreOpen: boolean
+  /** 深链带了固定种子时，提示这是全组同一道题 */
+  sharedSeed: number | null
   onOpenScore: () => void
   onRestart: () => void
   onExit: () => void
@@ -27,6 +29,7 @@ export default function TopBar({
   cash,
   budget,
   scoreOpen,
+  sharedSeed,
   onOpenScore,
   onRestart,
   onExit,
@@ -70,6 +73,14 @@ export default function TopBar({
       </dl>
 
       <div className="topbar__actions">
+        {sharedSeed !== null && (
+          <span
+            className="topbar__shared"
+            title={`Shared seed ${sharedSeed}: everyone who opens this link gets the same scenario`}
+          >
+            SHARED SEED
+          </span>
+        )}
         <button
           type="button"
           className={scoreOpen ? 'btn btn--active' : 'btn btn--ghost'}
@@ -82,7 +93,7 @@ export default function TopBar({
           type="button"
           className="btn btn--ghost"
           onClick={onRestart}
-          title="Start a new session with a fresh random seed"
+          title={sharedSeed !== null ? 'Replay the same scenario from the start (same seed)' : 'Start a new session with a fresh random seed'}
         >
           RESTART
         </button>

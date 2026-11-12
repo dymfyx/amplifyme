@@ -276,3 +276,15 @@ The desk is a hash-routed static app (`#sales` / `#market-maker`), so any static
 - **Hosted link:** https://dymfyx.github.io/amplifyme/ — every teammate opens it in a browser, picks a desk, sets an opening book and plays a 30-minute session. Each visit draws a fresh random seed, so scores are not comparable run to run but the scenario itself is the same.
 - **One file:** run `npm run build:single` and send `dist-single/index.html` (~330 KB). It opens from a double-click, offline, no server. Deep links `#sales` / `#market-maker` still work.
 - **Any static host:** drag the `dist/` folder onto https://app.netlify.com/drop for an instant throwaway URL.
+
+### Shared sessions (same scenario for the group)
+
+Append `?seed=<digits>` to a deep link to pin the scenario:
+
+- `https://dymfyx.github.io/amplifyme/#sales?seed=20261112`
+- `https://dymfyx.github.io/amplifyme/#market-maker?seed=20261112`
+
+Everyone who opens the same URL gets the same headline script, the same opening prices and the same price path
+(only the decisions differ), so scores are comparable. A `SHARED SEED` chip appears in the top bar, and
+`RESTART` replays the same session from 09:30 instead of drawing a new seed. Without `?seed=`, every visit
+picks a fresh random seed, shown in the status bar as `SEED nnnnnn`.

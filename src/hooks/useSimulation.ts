@@ -25,7 +25,7 @@ export interface SimulationApi {
   togglePause: () => void
   cycleSpeed: () => void
   setSpeed: (speed: number) => void
-  /** 换一个新种子重开一局；同一局的 seed 写在状态栏里，可用于复盘 */
+  /** 换种子重开一局；固定种子（分享链接）时按同一道题重放 */
   restart: () => void
 }
 
@@ -33,7 +33,11 @@ export interface SimulationApi {
  * 把纯引擎挂到 React 上：固定 250ms 一个 tick，按 speed 在一个 tick 内连续推进多步。
  * 所有写操作都走同一个 ref，避免 setState 的异步 updater 与动作回调读到旧状态。
  */
-export function useSimulation(initial: SimulationState, openingBook: OpeningPosition[] = []): SimulationApi {
+export function useSimulation(
+  initial: SimulationState,
+  openingBook: OpeningPosition[] = [],
+  fixedSeed: number | null = null,
+): SimulationApi {
   const [state, setState] = useState<SimulationState>(initial)
   const [latencyMs, setLatencyMs] = useState(14)
   const latest = useRef(state)
@@ -79,8 +83,8 @@ export function useSimulation(initial: SimulationState, openingBook: OpeningPosi
       togglePause: () => commit(togglePause(latest.current)),
       cycleSpeed: () => commit(cycleSpeed(latest.current)),
       setSpeed: (speed) => commit(applySpeed(latest.current, speed)),
-      restart: () => commit(createSession(undefined, openingBook)),
+      restart: () => commit(createSession(fixedSeed ?? undefined, openingBook)),
     }),
-    [state, latencyMs, run, commit, openingBook],
+    [state, latencyMs, run, commit, openingBook, fixedSeed],
   )
 }

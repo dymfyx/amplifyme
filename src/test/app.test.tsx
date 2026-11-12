@@ -102,6 +102,25 @@ describe('terminal shell', () => {
     expect(screen.getByText('MARKET MAKING DESK')).toBeInTheDocument()
   })
 
+  it('pins a shared seed from the url hash so the group sees the same scenario', () => {
+    window.location.hash = '#market-maker?seed=20261112'
+    render(<App />)
+    expect(screen.getByText('MARKET MAKING DESK')).toBeInTheDocument()
+    expect(screen.getByText('SEED 20261112')).toBeInTheDocument()
+    expect(screen.getByText('SHARED SEED')).toBeInTheDocument()
+  })
+
+  it('replays the pinned seed when the desk is restarted', () => {
+    window.location.hash = '#sales?seed=777'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'RESTART' }))
+    expect(screen.getByText('SEED 777')).toBeInTheDocument()
+    expect(clockText()).toBe('SIM 09:30:00')
+  })
+
   it('shows the pnl strip and the simulated clock', () => {
     openDesk('Sales')
     expect(screen.getByText('REALISED P&L')).toBeInTheDocument()

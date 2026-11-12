@@ -315,6 +315,17 @@ button {
   gap: 8px;
 }
 
+.topbar__shared {
+  align-self: center;
+  padding: 3px 7px;
+  border: 1px solid rgba(76, 141, 255, 0.55);
+  border-radius: 3px;
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
 .btn {
   border: 1px solid var(--line);
   background: #132033;

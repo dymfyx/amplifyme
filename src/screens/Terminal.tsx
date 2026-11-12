@@ -35,12 +35,14 @@ import TradeTicket from '../components/TradeTicket'
 interface TerminalProps {
   role: Role
   openingBook: OpeningPosition[]
+  /** 深链里带的固定种子：全组练同一道题，RESTART 也按同一局重放 */
+  seed?: number | null
   onExit: () => void
 }
 
-export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
-  const [initial] = useState(() => createSession(undefined, openingBook))
-  const simulation = useSimulation(initial, openingBook)
+export default function Terminal({ role, openingBook, seed = null, onExit }: TerminalProps) {
+  const [initial] = useState(() => createSession(seed ?? undefined, openingBook))
+  const simulation = useSimulation(initial, openingBook, seed)
   const { state } = simulation
 
   const [selected, setSelected] = useState('AZN')
@@ -112,6 +114,7 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
         cash={cash}
         budget={STARTING_CASH}
         scoreOpen={scoreOpen}
+        sharedSeed={seed}
         onOpenScore={() => setScoreOpen(true)}
         onRestart={handleRestart}
         onExit={onExit}

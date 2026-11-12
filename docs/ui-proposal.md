@@ -477,3 +477,11 @@ P0 已交付：
   ~330 KB 的 `dist-single/index.html`，可直接发微信/邮件，双击即玩。
 - GitHub Pages workflow（`.github/workflows/deploy.yml`）+ `netlify.toml`：推仓即出公网链接；
   哈希路由（`#sales` / `#market-maker`）不需要 SPA 重写规则。
+
+### 固定种子分享链接（P2.6）
+
+- 深链格式：`#sales?seed=20261112` / `#market-maker?seed=20261112`。`App.readDeepLink()` 解析 hash 里的 path 与 query，`seed` 只接受 1–9 位数字，解析失败退回随机种子。
+- `Terminal` 收到 `seed` 后调用 `createSession(seed, openingBook)`；`useSimulation(initial, openingBook, fixedSeed)` 的 `restart()` 在固定种子下重放同一局，否则 `randomSeed()`。
+- UI：TopBar 在固定种子时显示 `SHARED SEED` chip，RESTART 的 title 改为「重放同局」；状态栏 `SEED nnnnnn` 一直是权威值。
+- 同一 seed 下新闻时间轴、盘口随机量与价格路径完全一致（引擎是纯函数），只有玩家动作会分叉 —— 这是「全组练同一道题」的前提。
+- 测试：`src/test/app.test.tsx` 增加「pins a shared seed from the url hash」「replays the pinned seed when the desk is restarted」，总测试数 84。
