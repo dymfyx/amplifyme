@@ -361,3 +361,17 @@ P0 已交付：
 
 - `src/engine/simulation.test.ts`（20 例）：时钟与日期滚动、收盘、暂停/倍速、盘口不交叉、滚动窗口、同种子确定性、新闻揭示与冲击、派单到达、持仓 mark-to-market、PnL 公式、平仓实现盈利、反手均价、成交扣佣、非法单与交叉报价拒单。
 - `src/test/app.test.tsx`（16 例）：统一用 **fake timers + `fireEvent`**（`userEvent` 在 fake timers 下的内部 `setTimeout` 会挂住，见下），覆盖入口、hash 深链、时钟推进、暂停恢复、品种切换、派单装填、评分抽屉、报价/下单/切 Tab。
+## 14. 开局初始仓位（P1.1 追加）
+
+选完角色后多了一步 **Opening book** 设置页（`src/screens/SessionSetup.tsx`），两种开局：
+
+| 模式 | 行为 |
+|---|---|
+| `FLAT`（默认） | 空仓、零 P&L、$20M 交易预算全额可用 |
+| `CUSTOM BOOK` | 每个标的可填开仓数量（负数=空头）与均价，默认价取开盘参考价 |
+
+- 初始仓位**按填写的均价入账**，所以 P&L 从 0 起算；它与 $20M 交易预算是两笔账 —— 初始仓位的资金在开局即已备好，只有真正交易时现金才变动。
+- 引擎侧：`createSession(seed, openingBook)`，`OpeningPosition { symbol, netQty, avgPrice }`，非法/为零的行会被过滤；`normaliseOpeningBook()` 负责校验。
+- `RESTART` 会**沿用同一份初始仓位**、换新种子重开；`EXIT DESK` 回到角色选择，重新配置。
+- 深链 `#sales` / `#market-maker` 跳过设置页，直接空仓开台（方便截图与分享）。
+- 测试：引擎 3 例（初始仓位写入、非法行过滤、carried 仓位 mark-to-market）+ UI 4 例（默认平仓、自定义仓位带入且不动现金、RESTART 重放初始仓位、返回角色选择）。

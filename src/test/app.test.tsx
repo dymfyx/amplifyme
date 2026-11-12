@@ -14,6 +14,7 @@ afterEach(() => {
 const openDesk = (desk: 'Sales' | 'Market Maker') => {
   render(<App />)
   fireEvent.click(screen.getByRole('button', { name: `Start as ${desk}` }))
+  fireEvent.click(screen.getByRole('button', { name: `Open the ${desk} desk` }))
 }
 
 const clockText = () => screen.getByText(/^SIM /).textContent
@@ -46,6 +47,49 @@ describe('role selection', () => {
   it('returns to the entry screen when the desk is exited', () => {
     openDesk('Sales')
     fireEvent.click(screen.getByRole('button', { name: 'EXIT DESK' }))
+    expect(screen.getByRole('button', { name: 'Start as Market Maker' })).toBeInTheDocument()
+  })
+})
+
+describe('opening book', () => {
+  it('starts flat unless a custom book is configured', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Market Maker' }))
+    expect(screen.getByRole('button', { name: /FLAT/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /CUSTOM BOOK/ })).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Market Maker desk' }))
+    expect(screen.getByText('Flat — no open positions in this session')).toBeInTheDocument()
+  })
+
+  it('carries a custom position into the session without touching cash', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Sales' }))
+    fireEvent.click(screen.getByRole('button', { name: /CUSTOM BOOK/ }))
+    fireEvent.change(screen.getByLabelText('TSLA opening quantity'), { target: { value: '1200' } })
+    fireEvent.change(screen.getByLabelText('TSLA average price'), { target: { value: '196.80' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Sales desk' }))
+    expect(screen.queryByText('Flat — no open positions in this session')).not.toBeInTheDocument()
+    expect(screen.getByText('196.80')).toBeInTheDocument()
+    expect(screen.getByText('$20,000,000.00')).toBeInTheDocument()
+  })
+
+  it('re-applies the configured opening book on restart', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Market Maker' }))
+    fireEvent.click(screen.getByRole('button', { name: /CUSTOM BOOK/ }))
+    fireEvent.change(screen.getByLabelText('DUOL opening quantity'), { target: { value: '-500' } })
+    fireEvent.change(screen.getByLabelText('DUOL average price'), { target: { value: '281.00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Market Maker desk' }))
+    fireEvent.click(screen.getByRole('button', { name: 'RESTART' }))
+    expect(screen.getByText('SIM 09:30:00')).toBeInTheDocument()
+    expect(screen.getAllByText('DUOL').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('281.00').length).toBeGreaterThan(0)
+  })
+
+  it('goes back to the desk picker when the setup is cancelled', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Sales' }))
+    fireEvent.click(screen.getByRole('button', { name: '← CHANGE DESK' }))
     expect(screen.getByRole('button', { name: 'Start as Market Maker' })).toBeInTheDocument()
   })
 })

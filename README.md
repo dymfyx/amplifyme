@@ -30,6 +30,7 @@ npm run preview  # serve the production build
 | Route (state) | File | What it does |
 |---|---|---|
 | Entry | `src/screens/RoleSelect.tsx` | Two separate desk entrances: Sales and Market Maker |
+| Opening book | `src/screens/SessionSetup.tsx` | Start flat or carry a custom position per name |
 | Terminal | `src/screens/Terminal.tsx` | The trading shell with all panels |
 
 The terminal switches its central ticket by role:
@@ -39,6 +40,17 @@ The terminal switches its central ticket by role:
 
 The scorecard is hidden while you trade. Press `SCORE` in the top bar (or the teaser under the event feed) to
 reveal it in a drawer; `ESC` or a click on the backdrop closes it.
+
+## Opening book
+
+After picking a desk you decide what inventory you start with:
+
+- **FLAT** (default) — no positions, zero P&L, the full $20M trading budget.
+- **CUSTOM BOOK** — an opening quantity per name (negative = short) and an average price. The book is marked
+  at that average, so P&L starts at zero, and it is financed separately from the $20M trading budget.
+
+`RESTART` re-applies the same opening book against a fresh market seed; `EXIT DESK` goes back to the desk
+picker. Deep links (`#sales`, `#market-maker`) skip the setup step and open flat.
 
 ## Simulation clock
 
@@ -126,6 +138,7 @@ src/
   data/mock.ts          seed positions/orders/trades, news copy, scorecard copy
   screens/
     RoleSelect.tsx      desk selection screen
+    SessionSetup.tsx    opening book: flat or carry inventory
     Terminal.tsx        trading shell composition
   components/
     TopBar.tsx          brand, P&L strip, CASH, SCORE / RESTART / EXIT

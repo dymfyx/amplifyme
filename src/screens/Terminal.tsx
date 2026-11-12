@@ -13,6 +13,7 @@ import {
   selectSessionMeta,
   selectSeries,
   type FillInput,
+  type OpeningPosition,
   type QuoteInput,
 } from '../engine/simulation'
 import { useSimulation } from '../hooks/useSimulation'
@@ -29,12 +30,13 @@ import TradeTicket from '../components/TradeTicket'
 
 interface TerminalProps {
   role: Role
+  openingBook: OpeningPosition[]
   onExit: () => void
 }
 
-export default function Terminal({ role, onExit }: TerminalProps) {
-  const [initial] = useState(() => createSession())
-  const simulation = useSimulation(initial)
+export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
+  const [initial] = useState(() => createSession(undefined, openingBook))
+  const simulation = useSimulation(initial, openingBook)
   const { state } = simulation
 
   const [selected, setSelected] = useState('AZN')

@@ -74,6 +74,13 @@ export interface EnginePosition {
   realised: number
 }
 
+/** 开局自选的初始仓位：数量可正可负（负数=空头），按均价入账、P&L 从 0 起算 */
+export interface OpeningPosition {
+  symbol: string
+  netQty: number
+  avgPrice: number
+}
+
 export interface DispatchState extends Rfq {
   createdAt: number
 }
@@ -216,7 +223,26 @@ function randomSeed(): number {
   return 100000 + Math.floor(Math.random() * 900000)
 }
 
-export function createSession(seed = randomSeed()): SimulationState {
+/** 过滤掉非法/为零的行，只保留本局真实可交易的名字 */
+function normaliseOpeningBook(book: OpeningPosition[]): EnginePosition[] {
+  return book
+    .filter(
+      (entry) =>
+        UNIVERSE.some((instrument) => instrument.symbol === entry.symbol) &&
+        Number.isFinite(entry.netQty) &&
+        Number.isFinite(entry.avgPrice) &&
+        Math.trunc(entry.netQty) !== 0 &&
+        entry.avgPrice > 0,
+    )
+    .map((entry) => ({
+      symbol: entry.symbol,
+      netQty: Math.trunc(entry.netQty),
+      avgPrice: round2(entry.avgPrice),
+      realised: 0,
+    }))
+}
+
+export function createSession(seed = randomSeed(), openingBook: OpeningPosition[] = []): SimulationState {
   let rng = createSeed(seed)
   const instruments = UNIVERSE.map((entry) => {
     const prevClose = round2(entry.last / (1 + entry.changePct / 100))
@@ -257,8 +283,8 @@ export function createSession(seed = randomSeed()): SimulationState {
     status: 'RUNNING',
     speed: 1,
     instruments,
-    // 新的一局从空仓开始：持仓、成交、委托、佣金、已实现盈亏都归零，只保留现金预算
-    positions: [],
+    // 新的一局：持仓只来自开局自选的初始仓位，成交、委托、佣金、已实现盈亏都归零
+    positions: normaliseOpeningBook(openingBook),
     orders: [],
     trades: [],
     quotes: [],

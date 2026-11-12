@@ -11,6 +11,7 @@ import {
   togglePause,
   type ActionResult,
   type FillInput,
+  type OpeningPosition,
   type QuoteInput,
   type SimulationState,
 } from '../engine/simulation'
@@ -32,7 +33,7 @@ export interface SimulationApi {
  * 把纯引擎挂到 React 上：固定 250ms 一个 tick，按 speed 在一个 tick 内连续推进多步。
  * 所有写操作都走同一个 ref，避免 setState 的异步 updater 与动作回调读到旧状态。
  */
-export function useSimulation(initial: SimulationState): SimulationApi {
+export function useSimulation(initial: SimulationState, openingBook: OpeningPosition[] = []): SimulationApi {
   const [state, setState] = useState<SimulationState>(initial)
   const [latencyMs, setLatencyMs] = useState(14)
   const latest = useRef(state)
@@ -78,8 +79,8 @@ export function useSimulation(initial: SimulationState): SimulationApi {
       togglePause: () => commit(togglePause(latest.current)),
       cycleSpeed: () => commit(cycleSpeed(latest.current)),
       setSpeed: (speed) => commit(applySpeed(latest.current, speed)),
-      restart: () => commit(createSession()),
+      restart: () => commit(createSession(undefined, openingBook)),
     }),
-    [state, latencyMs, run, commit],
+    [state, latencyMs, run, commit, openingBook],
   )
 }

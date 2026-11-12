@@ -1455,3 +1455,145 @@ table.grid.grid--book tr.row--bid {
 }
 
 
+
+/* --------------------------------------------------------------- */
+/* Opening book setup                                                */
+/* --------------------------------------------------------------- */
+
+.setup {
+  max-width: 1040px;
+}
+
+.setup__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.setup__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.setup__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  text-align: left;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.setup__mode:hover {
+  border-color: var(--accent);
+}
+
+.setup__mode--on {
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.08);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.setup__mode-title {
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.setup__mode-note {
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.setup__table {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg-1);
+  overflow: hidden;
+}
+
+table.grid.grid--setup th {
+  padding: 7px 12px;
+}
+
+table.grid.grid--setup td {
+  padding: 5px 12px;
+  border-bottom: 1px solid rgba(34, 48, 73, 0.6);
+}
+
+table.grid.grid--setup tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.setup__name {
+  margin-left: 8px;
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.setup__input {
+  width: 118px;
+  text-align: right;
+  padding: 4px 7px;
+}
+
+.setup__hint {
+  margin: 8px 0 0;
+  padding: 0 12px 8px;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.setup__hint--wide {
+  padding: 0;
+  margin: 0;
+}
+
+.setup__summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.setup__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.setup__stat-label {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.setup__stat-value {
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.setup__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setup__start {
+  padding: 9px 20px;
+  font-size: 11px;
+}

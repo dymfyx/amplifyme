@@ -317,3 +317,36 @@ describe('cash budget', () => {
     expect(tooBig.message).toContain('cash budget')
   })
 })
+describe('opening book', () => {
+  it('seeds the book from the configured positions and nothing else', () => {
+    const state = createSession(7, [{ symbol: 'TSLA', netQty: 1200, avgPrice: 196.8 }])
+    const positions = selectPositions(state)
+    expect(positions).toHaveLength(1)
+    expect(positions[0].symbol).toBe('TSLA')
+    expect(positions[0].netQty).toBe(1200)
+    expect(positions[0].avgPrice).toBe(196.8)
+    expect(positions[0].realised).toBe(0)
+    expect(state.orders).toEqual([])
+    expect(state.trades).toEqual([])
+    expect(state.cash).toBe(STARTING_CASH)
+
+    const next = createSession(7)
+    expect(selectPositions(next)).toEqual([])
+  })
+
+  it('ignores zero, unknown and non-positive prices', () => {
+    const state = createSession(7, [
+      { symbol: 'AZN', netQty: 0, avgPrice: 800 },
+      { symbol: 'NOPE', netQty: 100, avgPrice: 10 },
+      { symbol: 'DUOL', netQty: -50, avgPrice: 0 },
+    ])
+    expect(selectPositions(state)).toEqual([])
+  })
+
+  it('marks a carried position against the live price', () => {
+    const state = advanceSession(createSession(7, [{ symbol: 'AZN', netQty: 1000, avgPrice: 800 }]), 8)
+    const azn = selectPositions(state)[0]
+    const last = state.instruments.find((instrument) => instrument.symbol === 'AZN')?.last ?? 0
+    expect(azn.unrealised).toBeCloseTo(1000 * (last - 800), 2)
+  })
+})
