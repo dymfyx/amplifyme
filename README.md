@@ -35,7 +35,7 @@ npm run preview  # serve the production build
 The terminal switches its central ticket by role:
 
 - **Market Maker** → `QUOTE TICKET` (two-way bid/offer, size, validity)
-- **Sales** → CLIENT ORDER (client, side, quantity, limit price) with a RECENT FILLS tape underneath
+- **Sales** → `CLIENT ORDER` (client, **desk side**, quantity, limit price) with a `RECENT FILLS` tape underneath. The side toggle is the *desk's* side: a client SELL defaults the toggle to BUY.
 
 The scorecard is hidden while you trade. Press `SCORE` in the top bar (or the teaser under the event feed) to
 reveal it in a drawer; `ESC` or a click on the backdrop closes it.
@@ -51,12 +51,39 @@ The session compresses 15 trading days (09:30-16:00 each) into 30 minutes of rea
 | `SPACE` | Pause / resume |
 | `1` `2` `4` | Pick a speed |
 
-Every engine tick moves the clock ~48.75 simulated seconds, random-walks each name, rebuilds its five-level book,
-reveals due headlines (with a price shock), counts quote validity down, and can fill a resting quote against the
-client. Positions are marked to market and `P&L`, `NET EXPOSURE` and `COMMISSION` recompute on every tick.
+Every engine tick moves the clock ~48.75 simulated seconds, counts quote validity down, and can fill a resting
+quote against the client. Positions are marked to market and `P&L`, `NET EXPOSURE` and `COMMISSION` recompute on
+every tick.
+
+### Market data cadence
+
+A 250 ms tick is not a price update. The tape refreshes on a slower cadence so the screen stays readable:
+
+| Knob | Value | Meaning |
+|---|---|---|
+| `PRICE_UPDATE_TICKS` | 4 | Prices move **once per second**; the ticks in between only advance the clock |
+| `BOOK_MIN_MOVE_BPS` | 8 | The five-level book is only rebuilt once the mid has moved 8 bps (0.08%); headlines and jumps force a rebuild |
+
+Each price update appends one point to the chart series, so the `30M / 2H / 6H / 1D` ranges read as 195-second
+bars. Order sizes are carried over with a ±30% jitter between rebuilds instead of being re-drawn from scratch.
 
 Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
 stale price by accident.
+
+### Seeds and restarts
+
+`createSession(seed)` is a pure function, so a session is fully reproducible from its seed. New sessions pick a
+random seed (`100000`-`999999`), shown as `SEED` in the status bar; `RESTART` in the top bar starts a fresh one.
+Same seed → same path; new session → different market.
+
+### Cash budget
+
+The desk starts with **$20,000,000** of cash (`STARTING_CASH`, shown as `CASH` in the P&L strip and
+`AVAILABLE CASH` in the ticket). Buys are settled in cash and charged 0.5% commission:
+
+- a client order that costs more than the remaining cash is rejected (`ORDER REJECTED · insufficient cash …`),
+- a bid the desk could not settle is rejected too (`QUOTE REJECTED · buying N would exceed the cash budget`),
+- sells credit cash, so the desk can trade its way back out of a tight book.
 
 ## Desktop shortcut
 
@@ -98,7 +125,7 @@ src/
     RoleSelect.tsx      desk selection screen
     Terminal.tsx        trading shell composition
   components/
-    TopBar.tsx          brand, P&L strip, SCORE / EXIT
+    TopBar.tsx          brand, P&L strip, CASH, SCORE / RESTART / EXIT
     MarketWatch.tsx     instrument list, click to load
     BookPanel.tsx       depth ladder with spread
     DispatchPanel.tsx   system-dispatched RFQs -> ticket
@@ -107,7 +134,7 @@ src/
     PositionsPanel.tsx  BOOK tabs: positions / orders / trades
     EventFeed.tsx       news feed with tag and impact
     ScoreDrawer.tsx     hidden scorecard drawer
-    StatusBar.tsx       sim clock, day counter, session state
+    StatusBar.tsx       sim clock, day counter, seed, session state
     PanelHeader.tsx     shared numbered panel header
   styles.css            design tokens + terminal layout
   test/
@@ -124,8 +151,8 @@ docs/ui-proposal.md     layout proposal, decisions and roadmap
 
 ## Status
 
-**P1 complete** — live clock, tick-driven prices, event shocks, quote/order fills and mark-to-market P&L all run
-off the simulation engine. Scoring is still a placeholder card.
+**P1 complete** — live clock, paced tick stream, event shocks, quote/order fills, cash settlement and
+mark-to-market P&L all run off the simulation engine. Scoring is still a placeholder card.
 
 | Phase | Scope |
 |---|---|

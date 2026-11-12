@@ -13,12 +13,25 @@ const fmt = (value: number) =>
 interface TopBarProps {
   role: Role
   pnl: Pnl
+  cash: number
+  budget: number
   scoreOpen: boolean
   onOpenScore: () => void
+  onRestart: () => void
   onExit: () => void
 }
 
-export default function TopBar({ role, pnl, scoreOpen, onOpenScore, onExit }: TopBarProps) {
+export default function TopBar({
+  role,
+  pnl,
+  cash,
+  budget,
+  scoreOpen,
+  onOpenScore,
+  onRestart,
+  onExit,
+}: TopBarProps) {
+  const cashTone = cash < budget * 0.1 ? 'num--down' : undefined
   return (
     <header className="topbar">
       <div className="topbar__brand">
@@ -43,6 +56,10 @@ export default function TopBar({ role, pnl, scoreOpen, onOpenScore, onExit }: To
           <dd>{fmt(pnl.netExposure)}</dd>
         </div>
         <div className="pnl-strip__item">
+          <dt>CASH</dt>
+          <dd className={cashTone}>{fmt(cash)}</dd>
+        </div>
+        <div className="pnl-strip__item">
           <dt>COMMISSION</dt>
           <dd>{fmt(pnl.commission)}</dd>
         </div>
@@ -60,6 +77,14 @@ export default function TopBar({ role, pnl, scoreOpen, onOpenScore, onExit }: To
           aria-expanded={scoreOpen}
         >
           SCORE
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onRestart}
+          title="Start a new session with a fresh random seed"
+        >
+          RESTART
         </button>
         <button type="button" className="btn btn--ghost" onClick={onExit}>
           EXIT DESK

@@ -15,6 +15,7 @@ interface TradeTicketProps {
   rfq: Rfq | undefined
   quotes: QuoteRow[]
   recentFills: TradeRow[]
+  cash: number
   onQuote: (input: QuoteInput) => string
   onFill: (input: FillInput) => string
   onDecline: () => string
@@ -27,6 +28,7 @@ export default function TradeTicket({
   rfq,
   quotes,
   recentFills,
+  cash,
   onQuote,
   onFill,
   onDecline,
@@ -36,7 +38,8 @@ export default function TradeTicket({
   const [offerPrice, setOfferPrice] = useState(() => book.asks[0].price.toFixed(2))
   const [bidVolume, setBidVolume] = useState('10000')
   const [offerVolume, setOfferVolume] = useState('10000')
-  const [side, setSide] = useState<Side>(rfq?.side ?? 'SELL')
+  /* 这里的 BUY/SELL 是"我们这一边"的动作：客户卖 → 我们买 */
+  const [side, setSide] = useState<Side>(rfq ? (rfq.side === 'SELL' ? 'BUY' : 'SELL') : 'BUY')
   const [qty, setQty] = useState(String(rfq?.qty ?? 1000))
   const [limitPrice, setLimitPrice] = useState(() => instrument.last.toFixed(2))
   const [tab, setTab] = useState<'live' | 'old'>('live')
@@ -73,7 +76,7 @@ export default function TradeTicket({
     }
     const message = onFill({
       symbol: instrument.symbol,
-      clientSide: side,
+      clientSide: side === 'BUY' ? 'SELL' : 'BUY',
       client: rfq?.client ?? 'AM-39',
       qty: Number(qty),
       price: Number(limitPrice),
@@ -93,7 +96,7 @@ export default function TradeTicket({
         title={isMaker ? 'QUOTE TICKET' : 'CLIENT ORDER'}
         right={
           <span className="panel__meta">
-            {rfq ? `${rfq.client} · ${rfq.side} ${rfq.qty} ${rfq.symbol}` : 'SYSTEM DISPATCH'}
+            {rfq ? `${rfq.client} · CLIENT ${rfq.side} ${rfq.qty} ${rfq.symbol}` : 'SYSTEM DISPATCH'}
           </span>
         }
       />
@@ -160,7 +163,7 @@ export default function TradeTicket({
                 <input className="field__input" value={rfq?.client ?? 'AM-39'} readOnly tabIndex={-1} />
               </label>
               <div className="field">
-                <span className="field__label">Side</span>
+                <span className="field__label">Desk side</span>
                 <div className="segmented" role="group" aria-label="Side">
                   {(['BUY', 'SELL'] as Side[]).map((option) => (
                     <button
@@ -215,6 +218,10 @@ export default function TradeTicket({
           <div className="stat">
             <span className="stat__label">COMMISSION</span>
             <span className="stat__value">${money(commission)}</span>
+          </div>
+          <div className="stat">
+            <span className="stat__label">AVAILABLE CASH</span>
+            <span className="stat__value stat__value--live">${money(cash)}</span>
           </div>
           <div className="ticket__actions">
             <button type="button" className="btn btn--primary" onClick={onSend}>

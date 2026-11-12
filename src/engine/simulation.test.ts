@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   DAY_SECONDS,
+  PRICE_UPDATE_TICKS,
   SESSION_SECONDS,
+  STARTING_CASH,
   START_SECONDS,
   applyPositionFill,
   createSession,
@@ -88,11 +90,27 @@ describe('market data', () => {
     }
   })
 
-  it('records every tick in the rolling price window', () => {
-    const state = advanceSession(session(), 30)
-    const azn = state.instruments.find((instrument) => instrument.symbol === 'AZN')
-    expect(azn?.series).toHaveLength(90)
-    expect(azn?.lastMove).not.toBe(0)
+  it('only refreshes the tape every few frames so the screen stays readable', () => {
+    const quiet = advanceSession(session(), PRICE_UPDATE_TICKS - 1)
+    const azn = quiet.instruments.find((instrument) => instrument.symbol === 'AZN')
+    const fresh = session().instruments.find((instrument) => instrument.symbol === 'AZN')
+    expect(azn?.last).toBe(fresh?.last)
+    expect(azn?.series).toHaveLength(fresh?.series.length ?? 0)
+    expect(azn?.book).toEqual(fresh?.book)
+
+    const moved = advanceSession(session(), PRICE_UPDATE_TICKS)
+    const after = moved.instruments.find((instrument) => instrument.symbol === 'AZN')
+    expect(after?.lastMove).not.toBe(0)
+    expect(after?.series).toHaveLength((fresh?.series.length ?? 0) + 1)
+  })
+
+  it('keeps the same seed reproducible and labels the session with it', () => {
+    expect(session(1234).seed).toBe(1234)
+    const first = advanceSession(session(1234), 40)
+    const second = advanceSession(session(1234), 40)
+    expect(first.instruments.map((instrument) => instrument.last)).toEqual(
+      second.instruments.map((instrument) => instrument.last),
+    )
   })
 
   it('is deterministic for a given seed', () => {
@@ -105,7 +123,7 @@ describe('market data', () => {
   })
 
   it('reveals headlines as the clock passes them', () => {
-    const state = advanceSession(session(), 10)
+    const state = advanceSession(session(), 110)
     expect(state.news.length).toBeGreaterThanOrEqual(1)
     expect(state.pendingNews.length).toBeLessThan(12)
     expect(state.chartEvents.length).toBeGreaterThanOrEqual(1)
@@ -216,5 +234,71 @@ describe('player actions', () => {
     const result = declineDispatch(session(), 'RFQ-201')
     expect(result.state.dispatch).toHaveLength(0)
     expect(result.message).toContain('DISPATCH DECLINED')
+  })
+})
+
+describe('cash budget', () => {
+  it('starts every session with the full budget', () => {
+    expect(session().cash).toBe(STARTING_CASH)
+  })
+
+  it('pays for buys and credits sells', () => {
+    const bought = fillClientOrder(session(), {
+      symbol: 'AZN',
+      clientSide: 'SELL',
+      client: 'AM-18',
+      qty: 1000,
+      price: 800,
+    })
+    const fee = 1000 * 800 * 0.005
+    expect(bought.state.cash).toBeCloseTo(STARTING_CASH - 1000 * 800 - fee, 2)
+
+    const sold = fillClientOrder(session(), {
+      symbol: 'AZN',
+      clientSide: 'BUY',
+      client: 'AM-18',
+      qty: 1000,
+      price: 800,
+    })
+    expect(sold.state.cash).toBeCloseTo(STARTING_CASH + 1000 * 800 - fee, 2)
+  })
+
+  it('refuses a buy the desk cannot fund', () => {
+    const state = session()
+    const result = fillClientOrder(state, {
+      symbol: 'AZN',
+      clientSide: 'SELL',
+      client: 'AM-18',
+      qty: 40000,
+      price: 800,
+    })
+    expect(result.message).toContain('insufficient cash')
+    expect(result.state).toBe(state)
+    expect(result.state.cash).toBe(STARTING_CASH)
+  })
+
+  it('refuses to quote a bid it could not settle', () => {
+    const state = session()
+    const result = sendQuote(state, {
+      symbol: 'AZN',
+      bid: 800,
+      offer: 802,
+      bidVolume: 5000,
+      offerVolume: 5000,
+      validFor: 45,
+      rfqId: 'RFQ-201',
+    })
+    expect(result.message).toContain('QUOTE SENT')
+
+    const tooBig = sendQuote({ ...state, cash: 1000 }, {
+      symbol: 'AZN',
+      bid: 800,
+      offer: 802,
+      bidVolume: 5000,
+      offerVolume: 5000,
+      validFor: 45,
+      rfqId: 'RFQ-201',
+    })
+    expect(tooBig.message).toContain('cash budget')
   })
 })

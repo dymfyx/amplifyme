@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   TICK_MS,
+  createSession,
   cycleSpeed,
   declineDispatch,
   fillClientOrder,
@@ -23,6 +24,8 @@ export interface SimulationApi {
   togglePause: () => void
   cycleSpeed: () => void
   setSpeed: (speed: number) => void
+  /** 换一个新种子重开一局；同一局的 seed 写在状态栏里，可用于复盘 */
+  restart: () => void
 }
 
 /**
@@ -75,6 +78,7 @@ export function useSimulation(initial: SimulationState): SimulationApi {
       togglePause: () => commit(togglePause(latest.current)),
       cycleSpeed: () => commit(cycleSpeed(latest.current)),
       setSpeed: (speed) => commit(applySpeed(latest.current, speed)),
+      restart: () => commit(createSession()),
     }),
     [state, latencyMs, run, commit],
   )

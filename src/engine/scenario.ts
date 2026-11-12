@@ -44,12 +44,18 @@ export interface NewsTemplate {
 
 const MINUTE = 60
 const HOUR = 60 * MINUTE
+/** 15 个交易日 × 6.5 小时，与 simulation.ts 的 SESSION_SECONDS 保持一致 */
+const SESSION = 15 * 6.5 * HOUR
 
-/** 12 条剧本，覆盖 15 个交易日的压缩时间轴 */
+/**
+ * 12 条剧本，均匀铺在 15 个交易日的压缩时间轴上。
+ * 一条新闻大约隔 2–3 分钟真实时间（约 1 至 1.5 个模拟交易日），
+ * 早期把 offset 挤在开盘后几十分钟会让右栏一秒弹三条，读都读不完。
+ */
 export const NEWS_TEMPLATES: NewsTemplate[] = [
   {
     id: 'N1',
-    offset: 3 * MINUTE,
+    offset: 0.012 * SESSION,
     kind: 'macro',
     tag: 'MACRO',
     impact: 3,
@@ -58,7 +64,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N2',
-    offset: 15 * MINUTE,
+    offset: 0.1 * SESSION,
     kind: 'note',
     tag: 'NOTE',
     impact: 2,
@@ -66,7 +72,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N3',
-    offset: 35 * MINUTE,
+    offset: 0.175 * SESSION,
     kind: 'equity',
     tag: 'TSLA',
     impact: 3,
@@ -76,7 +82,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N4',
-    offset: 70 * MINUTE,
+    offset: 0.25 * SESSION,
     kind: 'equity',
     tag: 'DUOL',
     impact: 2,
@@ -86,7 +92,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N5',
-    offset: 2.5 * HOUR,
+    offset: 0.33 * SESSION,
     kind: 'macro',
     tag: 'MACRO',
     impact: 3,
@@ -95,7 +101,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N6',
-    offset: 4 * HOUR,
+    offset: 0.41 * SESSION,
     kind: 'note',
     tag: 'NOTE',
     impact: 1,
@@ -103,7 +109,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N7',
-    offset: 6.5 * HOUR,
+    offset: 0.5 * SESSION,
     kind: 'note',
     tag: 'NOTE',
     impact: 1,
@@ -111,7 +117,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N8',
-    offset: 11 * HOUR,
+    offset: 0.58 * SESSION,
     kind: 'equity',
     tag: 'DUOL',
     impact: 3,
@@ -121,7 +127,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N9',
-    offset: 19 * HOUR,
+    offset: 0.67 * SESSION,
     kind: 'macro',
     tag: 'MACRO',
     impact: 2,
@@ -130,7 +136,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N10',
-    offset: 30 * HOUR,
+    offset: 0.75 * SESSION,
     kind: 'equity',
     tag: 'TSLA',
     impact: 2,
@@ -140,7 +146,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N11',
-    offset: 50 * HOUR,
+    offset: 0.84 * SESSION,
     kind: 'equity',
     tag: 'AZN',
     impact: 2,
@@ -150,7 +156,7 @@ export const NEWS_TEMPLATES: NewsTemplate[] = [
   },
   {
     id: 'N12',
-    offset: 72 * HOUR,
+    offset: 0.92 * SESSION,
     kind: 'equity',
     tag: 'NFLX',
     impact: 3,

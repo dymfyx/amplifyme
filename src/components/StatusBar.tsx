@@ -41,9 +41,10 @@ export default function StatusBar({ meta, onTogglePause, onCycleSpeed }: StatusB
           SPEED {meta.speed}x
         </button>
         <span>LATENCY {meta.latencyMs}ms</span>
+        <span title="Session seed — a restart picks a new one">SEED {meta.seed}</span>
       </div>
       <div className="statusbar__group statusbar__group--end">
-        <span>SPACE pause · 1/2/4 speed · ESC close</span>
+        <span>SPACE pause · 1/2/4 speed</span>
       </div>
     </footer>
   )

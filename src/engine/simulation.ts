@@ -31,7 +31,16 @@ export const SESSION_DAYS = 15
 export const SESSION_SECONDS = DAY_SECONDS * SESSION_DAYS
 export const START_SECONDS = 9 * 3600 + 30 * 60
 export const SIM_SECONDS_PER_TICK = SESSION_SECONDS / ((30 * 60 * 1000) / TICK_MS)
+/**
+ * 行情节奏：时钟每帧都走，但价格与盘口每 4 帧（1 秒真实时间）才刷新一次，
+ * 否则一屏数字每秒抖 4 下，盘口挂单根本看不清。
+ */
+export const PRICE_UPDATE_TICKS = 4
+/** 只有当价格相对上次建簿的位置移动超过这个基点，才重建盘口 */
+export const BOOK_MIN_MOVE_BPS = 8
 export const COMMISSION_RATE = 0.005
+/** 销售/做市台的总持有资金上限 */
+export const STARTING_CASH = 20_000_000
 export const CHART_POINTS = 120
 const HISTORY_POINTS = 60
 const MAX_DISPATCH = 3
@@ -55,6 +64,8 @@ export interface InstrumentState {
   lot: number
   series: number[]
   book: Book
+  /** 上次建簿时的中间价，用来判断盘口要不要跟着重挂 */
+  bookMid: number
 }
 
 export interface EnginePosition {
@@ -92,7 +103,10 @@ export interface PendingNews extends NewsItem {
 
 export interface SimulationState {
   rng: number
+  /** 这一局的随机种子；重启会换一个新的，同一局内可复现 */
+  seed: number
   tick: number
+  lastPriceTick: number
   startedAt: number
   simSeconds: number
   status: SessionStatus
@@ -107,6 +121,8 @@ export interface SimulationState {
   pendingNews: PendingNews[]
   chartEvents: ChartEvent[]
   commission: number
+  /** 可用资金（买入扣钱、卖出加钱），不能为负 */
+  cash: number
   nextDispatchAt: number
   counters: { rfq: number; quote: number; order: number; trade: number }
 }
@@ -118,6 +134,7 @@ export interface SessionMeta {
   status: SessionStatus
   speed: number
   latencyMs: number
+  seed: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -143,7 +160,13 @@ export function dayIndexAt(simSeconds: number): number {
 /* 盘口                                                                */
 /* ------------------------------------------------------------------ */
 
-function makeBook(rng: number, last: number, spreadBps: number, lot: number): [Book, number] {
+function makeBook(
+  rng: number,
+  last: number,
+  spreadBps: number,
+  lot: number,
+  previous?: Book,
+): [Book, number] {
   let state = rng
   const halfSpread = Math.max(0.01, round2((last * spreadBps) / 10000))
   const step = Math.max(0.01, round2(halfSpread / 2))
@@ -155,13 +178,18 @@ function makeBook(rng: number, last: number, spreadBps: number, lot: number): [B
     const [askRoll, afterAsk] = nextRandom(state)
     state = afterAsk
     const depth = level * 0.35
+    /* 有上一次的簿就沿用它的挂单量、只做 ±30% 的微调，让盘口看起来是在原地排队而不是整屏重刷 */
+    const bidBase = previous ? previous.bids[level].size : lot * (2 + bidRoll * 8)
+    const askBase = previous ? previous.asks[level].size : lot * (2 + askRoll * 8)
+    const bidSize = Math.round((bidBase * (0.7 + bidRoll * 0.6) * (previous ? 1 : 1 + depth)) / lot) * lot
+    const askSize = Math.round((askBase * (0.7 + askRoll * 0.6) * (previous ? 1 : 1 + depth)) / lot) * lot
     bids.push({
       price: round2(last - halfSpread - level * step),
-      size: Math.max(lot, Math.round((lot * (2 + bidRoll * 8) * (1 + depth)) / lot) * lot),
+      size: Math.max(lot, bidSize),
     })
     asks.push({
       price: round2(last + halfSpread + level * step),
-      size: Math.max(lot, Math.round((lot * (2 + askRoll * 8) * (1 + depth)) / lot) * lot),
+      size: Math.max(lot, askSize),
     })
   }
   return [{ bids, asks }, state]
@@ -184,7 +212,12 @@ function initialDispatch(): DispatchState {
   }
 }
 
-export function createSession(seed = 20261112): SimulationState {
+/** 每一局换一个新的种子，保证同一局内可复现、不同局走势不同 */
+function randomSeed(): number {
+  return 100000 + Math.floor(Math.random() * 900000)
+}
+
+export function createSession(seed = randomSeed()): SimulationState {
   let rng = createSeed(seed)
   const instruments = UNIVERSE.map((entry) => {
     const prevClose = round2(entry.last / (1 + entry.changePct / 100))
@@ -211,12 +244,15 @@ export function createSession(seed = 20261112): SimulationState {
       lot: entry.lot,
       series,
       book,
+      bookMid: entry.last,
     }
   })
 
   return {
     rng,
+    seed,
     tick: 0,
+    lastPriceTick: 0,
     startedAt: START_SECONDS,
     simSeconds: START_SECONDS,
     status: 'RUNNING',
@@ -246,6 +282,7 @@ export function createSession(seed = 20261112): SimulationState {
     })),
     chartEvents: [],
     commission: 4015,
+    cash: STARTING_CASH,
     nextDispatchAt: START_SECONDS + 900,
     counters: { rfq: 201, quote: 118, order: 1043, trade: 8841 },
   }
@@ -292,39 +329,57 @@ export function stepSession(state: SimulationState): SimulationState {
     }
   }
 
-  /* 2. 价格与盘口 */
-  const instruments = state.instruments.map((instrument) => {
-    const [move, afterMove] = normalish(rng)
-    rng = afterMove
-    const [jumpRoll, afterJump] = nextRandom(rng)
-    rng = afterJump
-    let jump = 0
-    if (jumpRoll < 0.012) {
-      const [extreme, afterExtreme] = normalish(rng)
-      rng = afterExtreme
-      jump = extreme * instrument.sigma * 6
-    }
-    /* 宏观冲击按个股波动率（beta）放大：高波动名字对同一条新闻反应更大 */
-    const beta = Math.min(1.6, Math.max(0.6, instrument.sigma / 0.0018))
-    const shock = (shocks.get(instrument.symbol) ?? 0) * beta
-    const next = Math.max(0.01, instrument.last * (1 + move * instrument.sigma + jump + shock))
-    const last = round2(next)
-    const [book, afterBook] = makeBook(rng, last, instrument.spreadBps, instrument.lot)
-    rng = afterBook
-    return {
-      ...instrument,
-      last,
-      lastMove: round2(last - instrument.last),
-      series: [...instrument.series.slice(-(CHART_POINTS - 1)), last],
-      book,
-    }
-  })
+  /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（1 秒）才刷新一次 */
+  const priceDue = tick - state.lastPriceTick >= PRICE_UPDATE_TICKS
+  const instruments = priceDue
+    ? state.instruments.map((instrument) => {
+        const [move, afterMove] = normalish(rng)
+        rng = afterMove
+        const [jumpRoll, afterJump] = nextRandom(rng)
+        rng = afterJump
+        let jump = 0
+        if (jumpRoll < 0.012) {
+          const [extreme, afterExtreme] = normalish(rng)
+          rng = afterExtreme
+          jump = extreme * instrument.sigma * 6
+        }
+        /* 宏观冲击按个股波动率（beta）放大：高波动名字对同一条新闻反应更大 */
+        const beta = Math.min(1.6, Math.max(0.6, instrument.sigma / 0.0018))
+        const shock = (shocks.get(instrument.symbol) ?? 0) * beta
+        const next = Math.max(0.01, instrument.last * (1 + move * instrument.sigma + jump + shock))
+        const last = round2(next)
+
+        /* 盘口只在价格相对上次挂单的位置明显移动（或遇到新闻/跳价）时才重挂 */
+        const movedBps = (Math.abs(last - instrument.bookMid) / instrument.bookMid) * 10000
+        const forcedRefresh = shock !== 0 || jump !== 0
+        let book = instrument.book
+        let bookMid = instrument.bookMid
+        if (forcedRefresh || movedBps >= BOOK_MIN_MOVE_BPS) {
+          const [nextBook, afterBook] = makeBook(rng, last, instrument.spreadBps, instrument.lot, instrument.book)
+          rng = afterBook
+          book = nextBook
+          bookMid = last
+        }
+
+        return {
+          ...instrument,
+          last,
+          lastMove: round2(last - instrument.last),
+          series: [...instrument.series.slice(-(CHART_POINTS - 1)), last],
+          book,
+          bookMid,
+        }
+      })
+    : state.instruments.map((instrument) =>
+        instrument.lastMove === 0 ? instrument : { ...instrument, lastMove: 0 },
+      )
 
   /* 3. 报价存活、成交与过期 */
   let positions = state.positions
   let trades = state.trades
   let orders = state.orders
   let commission = state.commission
+  let cash = state.cash
   let counters = state.counters
   let dispatch = state.dispatch
   const quotes: LiveQuote[] = []
@@ -356,8 +411,16 @@ export function stepSession(state: SimulationState): SimulationState {
 
     const ourSide: Side = quote.clientSide === 'SELL' ? 'BUY' : 'SELL'
     const price = quote.clientSide === 'SELL' ? quote.bid : quote.offer
+    const gross = price * quote.qty
+    const fee = round2(gross * COMMISSION_RATE)
+    /* 资金约束：买入必须有足够现金，否则这张报价自然作废 */
+    if (ourSide === 'BUY' && gross + fee > cash) {
+      quotes.push({ ...quote, status: 'EXPIRED', ttlTicks, fillInTicks: 0 })
+      continue
+    }
+    cash = round2(cash + (ourSide === 'BUY' ? -(gross + fee) : gross - fee))
     positions = applyPositionFill(positions, quote.symbol, ourSide, quote.qty, price)
-    commission = round2(commission + price * quote.qty * COMMISSION_RATE)
+    commission = round2(commission + fee)
     counters = {
       ...counters,
       trade: counters.trade + 1,
@@ -370,7 +433,7 @@ export function stepSession(state: SimulationState): SimulationState {
       side: ourSide,
       qty: quote.qty,
       price,
-      fee: round2(price * quote.qty * COMMISSION_RATE),
+      fee,
     }
     const filledOrder: OrderRow = {
       id: `ORD-${counters.order}`,
@@ -428,6 +491,7 @@ export function stepSession(state: SimulationState): SimulationState {
     ...state,
     rng,
     tick,
+    lastPriceTick: priceDue ? tick : state.lastPriceTick,
     simSeconds,
     status,
     instruments,
@@ -440,6 +504,7 @@ export function stepSession(state: SimulationState): SimulationState {
     pendingNews,
     chartEvents,
     commission,
+    cash,
     nextDispatchAt,
     counters,
   }
@@ -524,6 +589,15 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     return { state, message: 'QUOTE REJECTED · bid/offer out of range' }
   }
   const rfq = input.rfqId ? state.dispatch.find((item) => item.id === input.rfqId) : undefined
+  const clientSide = rfq?.side ?? 'SELL'
+  const qty = rfq?.qty ?? Math.max(500, Math.round((input.bidVolume + input.offerVolume) / 4))
+  /* 客户卖给我们 = 我们要拿现金接货，接不下就别报价 */
+  if (clientSide === 'SELL' && qty * input.bid * (1 + COMMISSION_RATE) > state.cash) {
+    return {
+      state,
+      message: `QUOTE REJECTED · buying ${qty.toLocaleString('en-US')} would exceed the cash budget`,
+    }
+  }
   const counter = state.counters.quote + 1
   let rng = state.rng
   const [fillDelay, afterFill] = randomInt(rng, 1, 3)
@@ -540,8 +614,8 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     validFor: input.validFor,
     status: 'LIVE',
     client: rfq?.client ?? 'AM-39',
-    qty: rfq?.qty ?? Math.max(500, Math.round((input.bidVolume + input.offerVolume) / 4)),
-    clientSide: rfq?.side ?? 'SELL',
+    qty,
+    clientSide,
     ttlTicks,
     fillInTicks: fillDelay,
     rfqId: rfq?.id,
@@ -571,8 +645,14 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     return { state, message: 'ORDER REJECTED · quantity and price must be positive' }
   }
   const ourSide: Side = input.clientSide === 'SELL' ? 'BUY' : 'SELL'
+  const gross = input.qty * input.price
+  const fee = round2(gross * COMMISSION_RATE)
+  if (ourSide === 'BUY' && gross + fee > state.cash) {
+    const need = Math.ceil(gross + fee).toLocaleString('en-US')
+    const have = Math.floor(state.cash).toLocaleString('en-US')
+    return { state, message: `ORDER REJECTED · insufficient cash (need $${need}, have $${have})` }
+  }
   const positions = applyPositionFill(state.positions, input.symbol, ourSide, input.qty, input.price)
-  const fee = round2(input.qty * input.price * COMMISSION_RATE)
   const counters = { ...state.counters, trade: state.counters.trade + 1, order: state.counters.order + 1 }
   const order: OrderRow = {
     id: `ORD-${counters.order}`,
@@ -599,6 +679,7 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
       commission: round2(state.commission + fee),
       orders: [order, ...state.orders].slice(0, 20),
       trades: [trade, ...state.trades].slice(0, 20),
+      cash: round2(state.cash + (ourSide === 'BUY' ? -(gross + fee) : gross - fee)),
       counters,
       dispatch: input.rfqId ? state.dispatch.filter((item) => item.id !== input.rfqId) : state.dispatch,
     },
@@ -695,10 +776,18 @@ export function selectChartMarkers(
 ): Array<{ index: number; label: string }> {
   const instrument = state.instruments.find((item) => item.symbol === symbol) ?? state.instruments[0]
   const total = instrument.series.length
+  const priceIndexNow = Math.floor(state.tick / PRICE_UPDATE_TICKS)
   return state.chartEvents
     .filter((event) => !event.symbol || event.symbol === symbol)
-    .map((event) => ({ index: total - 1 - (state.tick - event.tick), label: event.label }))
+    .map((event) => ({
+      index: total - 1 - (priceIndexNow - Math.floor(event.tick / PRICE_UPDATE_TICKS)),
+      label: event.label,
+    }))
     .filter((marker) => marker.index >= 0 && marker.index < total)
+}
+
+export function selectCash(state: SimulationState): number {
+  return round2(state.cash)
 }
 
 export function selectSessionMeta(state: SimulationState, latencyMs = 0): SessionMeta {
@@ -709,5 +798,6 @@ export function selectSessionMeta(state: SimulationState, latencyMs = 0): Sessio
     status: state.status,
     speed: state.speed,
     latencyMs,
+    seed: state.seed,
   }
 }

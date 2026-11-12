@@ -8,17 +8,18 @@ const PAD_X = 4
 const TOP = 18
 const BOTTOM = 64
 
-const RANGES = ['1M', '5M', '15M', '30M', '1H', 'ALL'] as const
+const RANGES = ['30M', '2H', '6H', '1D'] as const
 type RangeKey = (typeof RANGES)[number]
 
-/** 图上有 120 个 tick 的滚动窗口，周期按钮决定显示多少根 */
+/**
+ * 图上是 120 根滚动窗口，一根 = 一次行情刷新 ≈ 195 个模拟秒（3.25 分钟），
+ * 所以 1 个交易日正好 120 根；窗口标签直接按模拟时间给。
+ */
 const RANGE_POINTS: Record<RangeKey, number> = {
-  '1M': 24,
-  '5M': 48,
-  '15M': 84,
-  '30M': 120,
-  '1H': 120,
-  ALL: 120,
+  '30M': 9,
+  '2H': 37,
+  '6H': 111,
+  '1D': 120,
 }
 
 export interface ChartMarker {
@@ -33,7 +34,7 @@ interface ChartPanelProps {
 }
 
 export default function ChartPanel({ instrument, series, markers }: ChartPanelProps) {
-  const [range, setRange] = useState<RangeKey>('15M')
+  const [range, setRange] = useState<RangeKey>('6H')
   const points = Math.min(RANGE_POINTS[range], series.length)
   const values = series.slice(-points)
   const offset = series.length - values.length

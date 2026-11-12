@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import type { Role } from '../types'
 import { scoreCard } from '../data/mock'
 import {
+  STARTING_CASH,
   createSession,
   selectBook,
+  selectCash,
   selectChartMarkers,
   selectInstruments,
   selectPnl,
@@ -49,11 +51,20 @@ export default function Terminal({ role, onExit }: TerminalProps) {
   const rfqs = state.dispatch
   const activeRfq = rfqs.find((item) => item.id === activeRfqId)
   const meta = selectSessionMeta(state, simulation.latencyMs)
+  const cash = selectCash(state)
 
   const selectRfq = (id: string) => {
     setActiveRfqId(id)
     const rfq = rfqs.find((item) => item.id === id)
     if (rfq) setSelected(rfq.symbol)
+  }
+
+  /** 重开一局：换新种子，并把台面选择恢复成默认状态 */
+  const handleRestart = () => {
+    setSelected('AZN')
+    setActiveRfqId('RFQ-201')
+    setScoreOpen(false)
+    simulation.restart()
   }
 
   const handleQuote = (input: QuoteInput) => simulation.sendQuote(input)
@@ -85,8 +96,11 @@ export default function Terminal({ role, onExit }: TerminalProps) {
       <TopBar
         role={role}
         pnl={pnl}
+        cash={cash}
+        budget={STARTING_CASH}
         scoreOpen={scoreOpen}
         onOpenScore={() => setScoreOpen(true)}
+        onRestart={handleRestart}
         onExit={onExit}
       />
 
@@ -99,13 +113,14 @@ export default function Terminal({ role, onExit }: TerminalProps) {
 
         <section className="rail rail--center">
           <TradeTicket
-            key={`${selected}-${activeRfqId ?? 'none'}`}
+            key={`${selected}-${activeRfqId ?? 'none'}-${state.seed}`}
             role={role}
             instrument={instrument}
             book={book}
             rfq={activeRfq}
             quotes={state.quotes}
             recentFills={state.trades}
+            cash={cash}
             onQuote={handleQuote}
             onFill={handleFill}
             onDecline={handleDecline}

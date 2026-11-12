@@ -65,7 +65,7 @@ describe('terminal shell', () => {
     expect(screen.getByText('DAY 1/15')).toBeInTheDocument()
   })
 
-  it('advances the clock and the prices on every tick', () => {
+  it('refreshes prices on the market cadence, not on every frame', () => {
     openDesk('Market Maker')
     const beforeClock = clockText()
     const beforeRow = screen.getByTestId('market-row-AZN').textContent
@@ -76,6 +76,23 @@ describe('terminal shell', () => {
 
     expect(clockText()).not.toBe(beforeClock)
     expect(screen.getByTestId('market-row-AZN').textContent).not.toBe(beforeRow)
+  })
+
+  it('shows the cash budget for the desk', () => {
+    openDesk('Sales')
+    expect(screen.getByText('AVAILABLE CASH')).toBeInTheDocument()
+    expect(screen.getByText('CASH')).toBeInTheDocument()
+  })
+
+  it('restarts into a fresh session from the top bar', () => {
+    openDesk('Market Maker')
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(clockText()).not.toBe('SIM 09:30:00')
+    fireEvent.click(screen.getByRole('button', { name: 'RESTART' }))
+    expect(clockText()).toBe('SIM 09:30:00')
+    expect(screen.getByText('DAY 1/15')).toBeInTheDocument()
   })
 
   it('pauses and resumes the clock from the status bar', () => {
@@ -105,7 +122,7 @@ describe('terminal shell', () => {
 
   it('loads the dispatched rfq into the ticket', () => {
     openDesk('Market Maker')
-    expect(screen.getByText('AM-18 · SELL 2000 AZN')).toBeInTheDocument()
+    expect(screen.getByText('AM-18 · CLIENT SELL 2000 AZN')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /RFQ-201/ }))
     expect(screen.getByDisplayValue('AZN')).toBeInTheDocument()
   })
