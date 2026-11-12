@@ -20,6 +20,7 @@ export const zhData: Record<string, string> = {
   'block print': '大宗成交',
   'sweep bid': '扫单买盘',
   'sweep offer': '扫单卖盘',
+  'your fill': '你的成交',
 
   // 逐笔驱动提示（FLOW_EVENTS.hint）
   'A broker is working a buy order in the name': '经纪商正在该股上执行买单',
@@ -75,4 +76,7 @@ export const zhData: Record<string, string> = {
   'Open the settlement report': '打开结算报告',
   'Waiting for the next headline…': '等待下一条消息…',
   'Waiting for the market to move…': '等待行情跳动…',
+  'Your own size pressed the tape — the bigger the fill, the longer the drift it leaves behind.': '你自己的成交推动了价格 —— 单子越大，留下的漂移越久。',
+  'EST. FILL': '预计成交率',
+  'Quote width versus the market book — a wider quote is less likely to trade': '报价宽度相对市场盘口 —— 报得越宽越难成交',
 }

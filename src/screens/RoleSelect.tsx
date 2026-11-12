@@ -133,6 +133,9 @@ export default function RoleSelect({
           <span>{t('SCENARIO · REAL-WORLD EVENT REPLAY')}</span>
           <span>{t('MARKET · EQUITIES')}</span>
           <span>{t('MODE · PRACTICE')}</span>
+          <a className="role-select__guide" href="./beginner-guide.pdf" target="_blank" rel="noreferrer">
+            {t('BEGINNER GUIDE (PDF)')}
+          </a>
         </footer>
       </div>
     </main>

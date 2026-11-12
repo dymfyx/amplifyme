@@ -76,6 +76,19 @@ export const BOOK_MIN_MOVE_BPS = 8
 const FORCED_REBOOK_BPS = 12
 /** 每次行情刷新有多大概率出现一笔微观流动：几乎每帧都有，但绝大多数是小单，偶尔才有一笔扫单 */
 const FLOW_CHANCE = 0.92
+/** 我们自己的成交对价格的冲击：3–10bps，按成交金额线性放大，之后逐帧衰减 */
+export const FILL_IMPACT_MIN_BPS = 3
+export const FILL_IMPACT_MAX_BPS = 10
+/** 成交金额到这个规模（约 200 万股 × 800 元）时冲击用满 10bps */
+const FILL_IMPACT_FULL_NOTIONAL = 1_600_000
+/** 成交冲击先立刻走掉一部分，剩下的再逐帧衰减（避免冲击一闪而过看不见） */
+const FILL_IMPACT_SHARE = 0.4
+/** 成交冲击剩余部分的存活帧数，和新闻冲量一样每帧释放剩余幅度的 25% */
+const FILL_IMPACT_TTL = 12
+/** 报价比市场价差每宽 1 倍，被成交的概率下降多少（宽度 = 逆向选择的对价） */
+const WIDTH_FILL_PENALTY = 0.35
+const MIN_FILL_PROBABILITY = 0.12
+const MAX_FILL_PROBABILITY = 0.96
 /** 佣金按成交额的 5 个基点/边计（真实股票佣金量级），不会吃掉正常点差利润 */
 export const COMMISSION_RATE = 0.0005
 /** 销售/做市台的总持有资金上限 */
@@ -93,8 +106,8 @@ const pad = (value: number) => String(Math.floor(value)).padStart(2, '0')
 
 export type SessionStatus = 'RUNNING' | 'PAUSED' | 'CLOSED'
 
-/** 价格变动的解释来源：headline = 新闻冲量，flow = 市场微观流动 */
-export type DriverSource = 'headline' | 'flow'
+/** 价格变动的解释来源：headline = 新闻冲量，flow = 市场微观流动，fill = 我们自己的成交冲击 */
+export type DriverSource = 'headline' | 'flow' | 'fill'
 
 /** 某一次价格刷新里起作用的一个驱动因素 */
 export interface PriceDriver {
@@ -117,6 +130,8 @@ export interface PriceImpulse {
   bps: number
   ttl: number
   hint: string
+  /** 这条冲量来自新闻还是我们自己的成交 */
+  source: DriverSource
 }
 
 /** 一次价格刷新的完整记录，喂给 PRICE TAPE 面板 */
@@ -180,6 +195,10 @@ export interface LiveQuote extends QuoteRow {
   clientSide: Side
   ttlTicks: number
   fillInTicks: number
+  /** 报价宽度相对市场价差的倍数（<1 比市场更紧，>1 更宽） */
+  spreadRatio: number
+  /** 客户接受这张报价的概率，由 spreadRatio 决定 */
+  fillProbability: number
   rfqId?: string
 }
 
@@ -468,6 +487,61 @@ function bookOf(instruments: InstrumentState[], symbol: string): Book {
 /** 波动率缩放：同一句话对不同名字的影响不同（高波动名字反应更大） */
 const volScale = (sigma: number) => Math.min(1.8, Math.max(0.7, sigma / 0.0018))
 
+const clampUnit = (value: number) => Math.min(1, Math.max(0, value))
+
+/**
+ * 我们自己的成交推动价格的幅度（3–10bps）：成交金额越大，冲击越大；
+ * 撞上新闻时两者叠加，所以大单在消息行情里更危险。
+ */
+export function fillImpactBps(notional: number): number {
+  const size = clampUnit(notional / FILL_IMPACT_FULL_NOTIONAL)
+  return round2(FILL_IMPACT_MIN_BPS + (FILL_IMPACT_MAX_BPS - FILL_IMPACT_MIN_BPS) * size)
+}
+
+/**
+ * 报价宽度 → 被成交的概率（逆向选择）：
+ * 和市场一样宽约 96%，比市场宽 2 倍约 61%，宽到 3.4 倍以上就只能碰运气了（下限 12%）。
+ * 报得紧更容易成交，但成交时往往正被逆向选择，这就是做市的真实取舍。
+ */
+export function fillProbability(spreadRatio: number): number {
+  const ratio = Number.isFinite(spreadRatio) && spreadRatio > 0 ? spreadRatio : 1
+  const raw = MAX_FILL_PROBABILITY - WIDTH_FILL_PENALTY * (ratio - 1)
+  return round2(Math.min(MAX_FILL_PROBABILITY, Math.max(MIN_FILL_PROBABILITY, raw)))
+}
+
+/** 把一笔我们自己的成交变成该标的的冲量：买上推、卖下压，随后逐帧衰减 */
+function applyFillImpact(
+  instruments: InstrumentState[],
+  symbol: string,
+  ourSide: Side,
+  notional: number,
+  tick: number,
+): InstrumentState[] {
+  const bps = fillImpactBps(notional)
+  const direction: 1 | -1 = ourSide === 'BUY' ? 1 : -1
+  /* 四成立刻打进价格，立刻能在图上看到；剩下六成逐帧衰减 */
+  const immediate = round2(bps * FILL_IMPACT_SHARE)
+  const remaining = round2(bps - immediate)
+  const impulse: PriceImpulse = {
+    id: `FILL-${tick}-${symbol}`,
+    label: 'your fill',
+    direction,
+    bps: remaining,
+    ttl: FILL_IMPACT_TTL,
+    hint: 'Your own size pressed the tape — the bigger the fill, the longer the drift it leaves behind.',
+    source: 'fill',
+  }
+  return instruments.map((instrument) =>
+    instrument.symbol === symbol
+      ? {
+          ...instrument,
+          last: round2(Math.max(0.01, instrument.last * (1 + (direction * immediate) / 10000))),
+          impulses: [...instrument.impulses, impulse],
+        }
+      : instrument,
+  )
+}
+
 /** 按权重抽一个微观流动来源（每次行情刷新都会抽一个，保证价格变动有解释） */
 function pickFlowEvent(roll: number) {
   const total = FLOW_EVENTS.reduce((sum, event) => sum + event.weight, 0)
@@ -528,6 +602,7 @@ export function stepSession(state: SimulationState): SimulationState {
         bps: round2(item.driftBps * volScale(instrument.sigma)),
         ttl: DRIFT_TTL,
         hint: item.headline,
+        source: 'headline',
       }
       impulsesBySymbol.set(symbol, [...(impulsesBySymbol.get(symbol) ?? []), impulse])
     }
@@ -536,7 +611,7 @@ export function stepSession(state: SimulationState): SimulationState {
   /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（0.25 秒）刷新一次 */
   const priceDue = tick - state.lastPriceTick >= PRICE_UPDATE_TICKS
   let priceTape = state.priceTape
-  const instruments = priceDue
+  let instruments = priceDue
     ? state.instruments.map((instrument) => {
         const scale = volScale(instrument.sigma)
 
@@ -550,7 +625,7 @@ export function stepSession(state: SimulationState): SimulationState {
               label: impulse.label,
               direction: impulse.direction,
               bps,
-              source: 'headline',
+              source: impulse.source,
               hint: impulse.hint,
             })
           }
@@ -666,7 +741,8 @@ export function stepSession(state: SimulationState): SimulationState {
 
     const [roll, afterRoll] = nextRandom(rng)
     rng = afterRoll
-    if (roll >= 0.82) {
+    /* 报价宽度决定被接受的概率：报得越宽越难成交（逆向选择） */
+    if (roll >= quote.fillProbability) {
       quotes.push({ ...quote, status: 'EXPIRED', ttlTicks, fillInTicks: 0 })
       continue
     }
@@ -682,6 +758,8 @@ export function stepSession(state: SimulationState): SimulationState {
     }
     cash = round2(cash + (ourSide === 'BUY' ? -(gross + fee) : gross - fee))
     positions = applyPositionFill(positions, quote.symbol, ourSide, quote.qty, price)
+    /* 我们自己的成交推动价格：买上推、卖下压，幅度按成交金额（3–10bps），之后逐帧衰减 */
+    instruments = applyFillImpact(instruments, quote.symbol, ourSide, gross, tick)
     commission = round2(commission + fee)
     counters = {
       ...counters,
@@ -886,6 +964,11 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
   rng = afterFill
   /** "Valid for" 用模拟秒表示；按 tick 折算，最少 3 个 tick，保证能看到 LIVE 报价 */
   const ttlTicks = Math.min(24, Math.max(3, Math.round(input.validFor / 12)))
+  const marketBook = state.instruments.find((item) => item.symbol === input.symbol)?.book
+  const liveSpread = marketBook ? round2(marketBook.asks[0].price - marketBook.bids[0].price) : 0
+  const ourSpread = round2(input.offer - input.bid)
+  /** 报价宽度相对市场价差的倍数：决定被成交的概率，也进纪律评分 */
+  const spreadRatio = liveSpread > 0 ? round2(ourSpread / liveSpread) : 1
   const quote: LiveQuote = {
     id: `Q-${counter}`,
     symbol: input.symbol,
@@ -900,10 +983,10 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     clientSide,
     ttlTicks,
     fillInTicks: fillDelay,
+    spreadRatio,
+    fillProbability: fillProbability(spreadRatio),
     rfqId: rfq?.id,
   }
-  const marketBook = state.instruments.find((item) => item.symbol === input.symbol)?.book
-  const liveSpread = marketBook ? round2(marketBook.asks[0].price - marketBook.bids[0].price) : 0
   const responseTicks = rfq
     ? Math.max(0, Math.round((state.simSeconds - rfq.createdAt) / state.simSecondsPerTick))
     : null
@@ -951,6 +1034,8 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     return { state, message: `ORDER REJECTED · insufficient cash (need $${need}, have $${have})` }
   }
   const positions = applyPositionFill(state.positions, input.symbol, ourSide, input.qty, input.price)
+  /* 自己的成交同样会推动价格：按成交金额给 3–10bps 的冲量，随后逐帧衰减 */
+  const instruments = applyFillImpact(state.instruments, input.symbol, ourSide, gross, state.tick)
   const counters = { ...state.counters, trade: state.counters.trade + 1, order: state.counters.order + 1 }
   const order: OrderRow = {
     id: `ORD-${counters.order}`,
@@ -987,6 +1072,7 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     state: {
       ...state,
       positions,
+      instruments,
       telemetry,
       commission: round2(state.commission + fee),
       orders: [order, ...state.orders].slice(0, 20),
@@ -1110,7 +1196,8 @@ export function selectCash(state: SimulationState): number {
 export function selectPriceTape(state: SimulationState, limit = 7, minBps = 4): PriceChangeRecord[] {
   const notable = state.priceTape.filter(
     (change) =>
-      Math.abs(change.bps) >= minBps || change.drivers.some((driver) => driver.source === 'headline'),
+      Math.abs(change.bps) >= minBps ||
+      change.drivers.some((driver) => driver.source === 'headline' || driver.source === 'fill'),
   )
   return notable.slice(-limit)
 }

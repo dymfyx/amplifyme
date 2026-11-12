@@ -233,6 +233,19 @@ button {
   opacity: 0.75;
 }
 
+.role-select__guide {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(76, 141, 255, 0.45);
+  padding-bottom: 2px;
+  white-space: nowrap;
+}
+
+.role-select__guide:hover {
+  border-bottom-color: var(--accent);
+}
+
+
 /* ------------------------------------------------------------------ */
 /* Terminal shell                                                      */
 /* ------------------------------------------------------------------ */

@@ -97,6 +97,14 @@ rebuilds instead of being re-drawn from scratch.
 Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
 stale price by accident.
 
+### Quote width and fill probability
+
+A quote that is 1x the market spread is filled about **96%** of the time; widen it to 2x and the client accepts
+it about **61%** of the time, 3x about **26%**, with a hard floor of 12%. The ticket shows the live number as
+`EST. FILL`, and the same ratio feeds the `DISCIPLINE` score. Tight quotes win the flow and eat adverse
+selection; wide quotes trade rarely but keep the edge. Anything past ~3.4x the market spread is basically a
+pass, so the RFQ is better declined than quoted.
+
 ### What moves the tape
 
 Prices are event driven: every update is the sum of **named drivers**, so no move is random noise.
@@ -105,6 +113,10 @@ Prices are event driven: every update is the sum of **named drivers**, so no mov
 |---|---|---|
 | `headline` | a released news item with `direction` (+1/-1) and `driftBps` in `src/engine/scenario.ts`, scaled by the name's `sigma` (0.7x-1.8x) | up to ±110 bps, released over ~12 s |
 | `flow` | one of twelve balanced microstructure events in `FLOW_EVENTS` (buy flow / sell flow, ETF bid / ETF offer, short cover / long unwind, retail bid / retail sell, index flow, block print, sweep bid / sweep offer), drawn by weight with equal bullish/bearish mass; occasional sweeps print 3x normal size | 3-11 bps per update |
+| `fill` | your own executions: buying presses the price up, selling presses it down, sized off the traded notional (`fillImpactBps`) | 3-10 bps, 40% immediately and the rest decaying over ~12 updates |
+
+Your own fills are part of the model too: a $1.6m clip leaves the full 10 bps behind, a $160k clip about 3.6 bps.
+That is why working a big order in one go moves the book against you — split it and let the impact decay.
 
 The `PRICE TAPE` panel lists every material update with its drivers, and the `DRIVER` column in
 `MARKET WATCH` shows the latest cause per name (hover for the full remark). The event feed tags each
@@ -245,6 +257,7 @@ launcher/
   install-shortcut.ps1  create the desktop shortcut
 public/icon.ico         shortcut icon + favicon
 docs/ui-proposal.md     layout proposal, decisions and roadmap
+docs/beginner-guide.pdf  Chinese beginner guide (screenshots, playbook, FAQ)
 ```
 
 ## Status
@@ -283,6 +296,9 @@ secret to deploy. Any static file host will do.
    `https://<user>.github.io/<repo>/`.
 
 The app is hash-routed (`#sales`, `#market-maker`), so no SPA rewrite rule is needed and deep links keep working.
+
+The Chinese beginner guide ships with the site: `docs/beginner-guide.pdf` is the source, copied to
+`public/beginner-guide.pdf` so it is served at `/beginner-guide.pdf`; the entry screen links to it.
 
 ### Netlify Drop (instant URL, no CI)
 

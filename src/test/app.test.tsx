@@ -261,6 +261,16 @@ describe('tickets', () => {
     expect(screen.getByText(/^Q-\d+$/)).toBeInTheDocument()
   })
 
+  it('shows the estimated fill chance next to the maker ticket', () => {
+    openDesk('Market Maker')
+    const label = screen.getByText('EST. FILL')
+    const stat = label.parentElement
+    expect(stat?.textContent).toMatch(/EST\. FILL\d{1,3}%/)
+    const chance = Number(stat?.textContent?.replace('EST. FILL', '').replace('%', ''))
+    expect(chance).toBeGreaterThan(0)
+    expect(chance).toBeLessThanOrEqual(96)
+  })
+
   it('fills a client order for a sales trader and updates the position', () => {
     openDesk('Sales')
     fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1500' } })
@@ -349,6 +359,12 @@ describe('entry settings', () => {
     expect(screen.getByText('TIME LEFT')).toBeInTheDocument()
     expect(screen.getByText('05:00')).toBeInTheDocument()
     expect(screen.getByText('5 MIN')).toBeInTheDocument()
+  })
+
+  it('links the beginner guide from the entry screen', () => {
+    render(<App />)
+    const link = screen.getByRole('link', { name: 'BEGINNER GUIDE (PDF)' })
+    expect(link).toHaveAttribute('href', './beginner-guide.pdf')
   })
 
   it('keeps the language when the desk is opened', () => {

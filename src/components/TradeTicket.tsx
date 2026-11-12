@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { Book, Instrument, QuoteRow, Rfq, Role, Side, TradeRow } from '../types'
+import { COMMISSION_RATE, fillProbability } from '../engine/simulation'
 import type { FillInput, QuoteInput } from '../engine/simulation'
 import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
-
-const COMMISSION_RATE = 0.005
 
 const money = (value: number) =>
   value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -61,6 +60,10 @@ export default function TradeTicket({
     ? Number(offerVolume || 0) * Number(offerPrice || 0)
     : Number(qty || 0) * Number(limitPrice || 0)
   const commission = notional * COMMISSION_RATE
+  /* 报价宽度相对市场价差 → 客户接受概率（报得越宽越难成交） */
+  const marketSpread = book.asks[0].price - book.bids[0].price
+  const ourSpread = Number(offerPrice || 0) - Number(bidPrice || 0)
+  const fillChance = marketSpread > 0 && ourSpread > 0 ? fillProbability(ourSpread / marketSpread) : 1
 
   const onSend = () => {
     if (isMaker) {
@@ -228,6 +231,12 @@ export default function TradeTicket({
             <span className="stat__label">{t('COMMISSION')}</span>
             <span className="stat__value">${money(commission)}</span>
           </div>
+          {isMaker && (
+            <div className="stat" title={t('Quote width versus the market book — a wider quote is less likely to trade')}>
+              <span className="stat__label">{t('EST. FILL')}</span>
+              <span className="stat__value stat__value--live">{Math.round(fillChance * 100)}%</span>
+            </div>
+          )}
           <div className="stat">
             <span className="stat__label">{t('AVAILABLE CASH')}</span>
             <span className="stat__value stat__value--live">${money(cash)}</span>

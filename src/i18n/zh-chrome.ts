@@ -30,6 +30,7 @@ export const zhChrome: Record<string, string> = {
   'SCENARIO · REAL-WORLD EVENT REPLAY': '情景 · 真实事件回放',
   'MARKET · EQUITIES': '市场 · 股票',
   'MODE · PRACTICE': '模式 · 练习',
+  'BEGINNER GUIDE (PDF)': '新手指南（PDF）',
 
   // 初始持仓页
   'Opening book': '初始持仓',

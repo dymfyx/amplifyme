@@ -511,3 +511,35 @@ P0 已交付：
 
 - 94 例全绿：engine 33（含档位 `simSecondsPerTick`、5 分钟档 1,200 tick 收盘与 `timeLeftMs` 归零、基准与手工计算一致、空仓跑输/跑赢基准的判定）+ scoring 10 + app 34（语言切换、时长带入台面并显示倒计时、深链 `lang/zh&minutes/5`、5 分钟档自动结算 + BENCHMARK）+ launcher 7 + deploy 10。
 - 截图：`.tmp/tier-entry-en.png` / `.tmp/tier3-entry-zh.png`（入口双语 + 时长条）、`.tmp/tier-desk5.png`（5 分钟档顶栏 `TIME LEFT 04:56 5 MIN`）、`.tmp/tier2-desk-zh2.png` / `.tmp/tier3-desk-zh-1280.png`（中文台面，1280 不裁切）、`.tmp/tier3-report-zh.png`（中文结算报告含基准对比）。
+
+## 18. 成交冲击与报价宽度（P2.8）
+
+### 需求
+
+- 自己的成交要推动价格：按成交金额给 3–10bps 冲击并衰减。
+- 报价宽度要影响成交概率（引入逆向选择）。
+- 另出一份带截图的中文新手指南 PDF。
+
+### 成交冲击
+
+- `src/engine/simulation.ts`：`FILL_IMPACT_MIN_BPS = 3`、`FILL_IMPACT_MAX_BPS = 10`、`FILL_IMPACT_FULL_NOTIONAL = 1_600_000`（成交额到 160 万美元用满 10bps）、`FILL_IMPACT_SHARE = 0.4`、`FILL_IMPACT_TTL = 12`。
+- `export function fillImpactBps(notional)`：线性映射，低于 0 或超过满额都钳在 3/10bps。
+- `applyFillImpact(instruments, symbol, ourSide, notional, tick)`：买入 direction=+1、卖出 −1；**四成立刻打进 `last`**（保证图上马上看到），剩余六成作为 `PriceImpulse{ label: 'your fill', source: 'fill', ttl: 12 }` 按 `DRIFT_RELEASE=25%` 逐帧释放。
+- 接线：市价单成交（`fillClientOrder`）与报价被接受（`stepSession` 报价循环）都会调用；`selectPriceTape` 的过滤条件加了 `driver.source === 'fill'`，保证自己的成交一定会出现在 PRICE TAPE；`MARKET WATCH` 的 DRIVER 列同样会显示 `your fill`。
+- 中文：`zh-data.ts` 增加 `'your fill': '你的成交'` 与提示句。
+
+### 报价宽度 → 成交概率
+
+- `LiveQuote` 增加 `spreadRatio`（报价价差 / 当时市场价差）与 `fillProbability`。
+- `export function fillProbability(spreadRatio)`：`0.96 − 0.35 × (ratio − 1)`，钳在 0.12–0.96 → 1 倍约 96%、2 倍 61%、3 倍 26%、≥3.4 倍到底 12%。
+- `sendQuote` 计算并写进报价；`stepSession` 判定成交从固定 0.82 改为 `roll < quote.fillProbability`。
+- 报价单新增 `EST. FILL` 统计格（只对做市商显示，百分比实时随报价宽度变化），`COMMISSION_RATE` 也从组件里的错值 0.005 改为引用引擎常量 0.0005。
+
+### 测试
+
+- 新增 `src/engine/impact.test.ts`（7 例）：冲击映射边界与单调性、买/卖方向、四成立刻到价、剩余六成逐帧变小并在 16 帧内消失、`your fill` 出现在 PRICE TAPE、宽度概率曲线与钳位、`sendQuote` 写入的 `spreadRatio`/`fillProbability`。
+- UI 新增“估算成交率”用例；**全量 102 例全绿**，`npm run build` 通过。`docs/beginner-guide.pdf`（12 页、A4 白底、6 张截图）同时复制到 `public/beginner-guide.pdf` 由站点直接提供（入口页底部有 “新手指南（PDF）” 链接）；`src/test/docs.test.ts` 校验两份文件存在、`%PDF-` 魔数、体积 >120KB、页数 ≥6，app 测试校验入口链接 href。加上后全量 **105 例**。
+
+### 新手指南
+
+- `docs/beginner-guide.pdf`：中文，白底 A4，含入口/开局持仓/做市台面/销售台面/结算报告五张截图，覆盖两个台面的玩法、行情驱动机制（新闻、流动、自己的成交冲击）、三档时长、快捷键、评分与基准、分享链接与常见问题。
