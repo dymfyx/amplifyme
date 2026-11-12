@@ -194,13 +194,8 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Valid for (seconds)</span>
-                <input
-                  className="field__input"
-                  inputMode="numeric"
-                  value={validFor}
-                  onChange={(event) => setValidFor(event.target.value)}
-                />
+                <span className="field__label">Client ref</span>
+                <input className="field__input" value={rfq?.id ?? 'MANUAL'} readOnly tabIndex={-1} />
               </label>
             </>
           )}
