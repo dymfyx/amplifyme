@@ -1,4 +1,5 @@
 import type { Rfq, Role } from '../types'
+import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
 
 interface DispatchPanelProps {
@@ -9,13 +10,14 @@ interface DispatchPanelProps {
 }
 
 export default function DispatchPanel({ rfqs, activeId, onSelect, role }: DispatchPanelProps) {
+  const t = useT()
   const title = role === 'market-maker' ? 'DISPATCH' : 'CLIENT FLOW'
   return (
     <section className="panel panel--dispatch">
       <PanelHeader
         index="3"
-        title={title}
-        right={<span className="badge badge--live">{rfqs.length} OPEN</span>}
+        title={t(title)}
+        right={<span className="badge badge--live">{t('{count} OPEN', { count: rfqs.length })}</span>}
       />
       <ul className="dispatch-list">
         {rfqs.map((rfq) => {
@@ -35,19 +37,19 @@ export default function DispatchPanel({ rfqs, activeId, onSelect, role }: Dispat
                 </span>
                 <span className="dispatch__body">
                   <span className={rfq.side === 'BUY' ? 'side side--buy' : 'side side--sell'}>
-                    {rfq.side}
+                    {t(rfq.side)}
                   </span>
                   <span className="dispatch__size">{rfq.qty.toLocaleString('en-US')}</span>
                   <span className="dispatch__symbol">{rfq.symbol}</span>
                 </span>
-                <span className="dispatch__note">{rfq.note}</span>
+                <span className="dispatch__note">{t(rfq.note)}</span>
               </button>
             </li>
           )
         })}
       </ul>
       <footer className="panel__foot">
-        <span>SYSTEM DISPATCH · AUTO-ROUTED</span>
+        <span>{t('SYSTEM DISPATCH · AUTO-ROUTED')}</span>
       </footer>
     </section>
   )

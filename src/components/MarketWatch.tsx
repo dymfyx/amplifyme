@@ -1,5 +1,6 @@
 import type { Instrument } from '../types'
 import type { PriceDriver } from '../engine/simulation'
+import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
 
 interface MarketWatchProps {
@@ -17,12 +18,13 @@ const moveClass = (move: number | undefined) => {
 }
 
 export default function MarketWatch({ instruments, selected, drivers, onSelect }: MarketWatchProps) {
+  const t = useT()
   return (
     <section className="panel panel--market">
       <PanelHeader
         index="1"
-        title="MARKET WATCH"
-        right={<span className="panel__meta">{instruments.length} NAMES</span>}
+        title={t('MARKET WATCH')}
+        right={<span className="panel__meta">{t('{count} NAMES', { count: instruments.length })}</span>}
       />
       <div className="table-wrap">
         <table className="grid grid--market">
@@ -34,10 +36,10 @@ export default function MarketWatch({ instruments, selected, drivers, onSelect }
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">TICKER</th>
-              <th scope="col" className="num">LAST</th>
-              <th scope="col" className="num">CHG %</th>
-              <th scope="col">DRIVER</th>
+              <th scope="col">{t('TICKER')}</th>
+              <th scope="col" className="num">{t('LAST')}</th>
+              <th scope="col" className="num">{t('CHG %')}</th>
+              <th scope="col">{t('DRIVER')}</th>
             </tr>
           </thead>
           <tbody>
@@ -53,7 +55,11 @@ export default function MarketWatch({ instruments, selected, drivers, onSelect }
                   data-testid={`market-row-${instrument.symbol}`}
                 >
                   <td>
-                    <button type="button" className="ticker" aria-label={`Select ${instrument.symbol}`}>
+                    <button
+                      type="button"
+                      className="ticker"
+                      aria-label={t('Select {symbol}', { symbol: instrument.symbol })}
+                    >
                       {instrument.symbol}
                     </button>
                     <span className="ticker__name">{instrument.name}</span>
@@ -70,11 +76,11 @@ export default function MarketWatch({ instruments, selected, drivers, onSelect }
                     {driver ? (
                       <span
                         className={`driver driver--${driver.direction > 0 ? 'up' : 'down'} driver--${driver.source}`}
-                        title={`${driver.label} · ${driver.bps.toFixed(1)}bps · ${driver.hint}`}
+                        title={`${t(driver.label)} · ${driver.bps.toFixed(1)}bps · ${t(driver.hint)}`}
                         data-testid={`driver-${instrument.symbol}`}
                       >
                         <span className="driver__arrow">{driver.direction > 0 ? '▲' : '▼'}</span>
-                        <span className="driver__label">{driver.label}</span>
+                        <span className="driver__label">{t(driver.label)}</span>
                       </span>
                     ) : (
                       <span className="muted">—</span>

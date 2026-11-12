@@ -11,7 +11,9 @@ import {
   togglePause,
   type ActionResult,
   type FillInput,
+  DEFAULT_MINUTES,
   type OpeningPosition,
+  type SessionMinutes,
   type QuoteInput,
   type SimulationState,
 } from '../engine/simulation'
@@ -37,6 +39,7 @@ export function useSimulation(
   initial: SimulationState,
   openingBook: OpeningPosition[] = [],
   fixedSeed: number | null = null,
+  minutes: SessionMinutes = DEFAULT_MINUTES,
 ): SimulationApi {
   const [state, setState] = useState<SimulationState>(initial)
   const [latencyMs, setLatencyMs] = useState(14)
@@ -83,8 +86,8 @@ export function useSimulation(
       togglePause: () => commit(togglePause(latest.current)),
       cycleSpeed: () => commit(cycleSpeed(latest.current)),
       setSpeed: (speed) => commit(applySpeed(latest.current, speed)),
-      restart: () => commit(createSession(fixedSeed ?? undefined, openingBook)),
+      restart: () => commit(createSession(fixedSeed ?? undefined, openingBook, { minutes })),
     }),
-    [state, latencyMs, run, commit, openingBook, fixedSeed],
+    [state, latencyMs, run, commit, openingBook, fixedSeed, minutes],
   )
 }

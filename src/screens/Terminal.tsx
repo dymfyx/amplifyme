@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Role } from '../types'
 import {
+  DEFAULT_MINUTES,
   STARTING_CASH,
   createSession,
   selectBook,
@@ -11,21 +12,24 @@ import {
   selectPnl,
   selectPositions,
   selectPriceTape,
-  selectSessionMeta,
   selectSeries,
+  selectSessionMeta,
   type FillInput,
   type OpeningPosition,
   type QuoteInput,
+  type SessionMinutes,
 } from '../engine/simulation'
-import { coachingLine, scoreSession, selectSettlement } from '../engine/scoring'
+import { adviceFor, coachingSummary, scoreSession, selectSettlement } from '../engine/scoring'
+import { NEWS_REACTION_TICKS } from '../engine/telemetry'
+import { useT } from '../i18n'
 import { useSimulation } from '../hooks/useSimulation'
-import BookPanel from '../components/BookPanel'
 import ChartPanel from '../components/ChartPanel'
+import BookPanel from '../components/BookPanel'
 import DispatchPanel from '../components/DispatchPanel'
 import EventFeed from '../components/EventFeed'
 import MarketWatch from '../components/MarketWatch'
-import PositionsPanel from '../components/PositionsPanel'
 import PriceTape from '../components/PriceTape'
+import PositionsPanel from '../components/PositionsPanel'
 import ScoreDrawer from '../components/ScoreDrawer'
 import SettlementReport from '../components/SettlementReport'
 import StatusBar from '../components/StatusBar'
@@ -37,12 +41,21 @@ interface TerminalProps {
   openingBook: OpeningPosition[]
   /** 深链里带的固定种子：全组练同一道题，RESTART 也按同一局重放 */
   seed?: number | null
+  /** 练习时长档位：5 / 15 / 30 分钟 */
+  minutes?: SessionMinutes
   onExit: () => void
 }
 
-export default function Terminal({ role, openingBook, seed = null, onExit }: TerminalProps) {
-  const [initial] = useState(() => createSession(seed ?? undefined, openingBook))
-  const simulation = useSimulation(initial, openingBook, seed)
+export default function Terminal({
+  role,
+  openingBook,
+  seed = null,
+  minutes = DEFAULT_MINUTES,
+  onExit,
+}: TerminalProps) {
+  const t = useT()
+  const [initial] = useState(() => createSession(seed ?? undefined, openingBook, { minutes }))
+  const simulation = useSimulation(initial, openingBook, seed, minutes)
   const { state } = simulation
 
   const [selected, setSelected] = useState('AZN')
@@ -65,6 +78,12 @@ export default function Terminal({ role, openingBook, seed = null, onExit }: Ter
   const cash = selectCash(state)
   const score = scoreSession(state)
   const settlement = selectSettlement(state)
+  const coaching = coachingSummary(state)
+  const coachingText = t('Strongest: {best}. Weakest: {worst} — {advice}', {
+    best: t(coaching.strongest),
+    worst: t(coaching.weakest),
+    advice: t(adviceFor(coaching.adviceKey), { ticks: NEWS_REACTION_TICKS }),
+  })
   const closed = state.status === 'CLOSED'
 
   const selectRfq = (id: string) => {
@@ -115,6 +134,8 @@ export default function Terminal({ role, openingBook, seed = null, onExit }: Ter
         budget={STARTING_CASH}
         scoreOpen={scoreOpen}
         sharedSeed={seed}
+        minutes={meta.minutes}
+        timeLeftMs={meta.timeLeftMs}
         onOpenScore={() => setScoreOpen(true)}
         onRestart={handleRestart}
         onExit={onExit}
@@ -146,7 +167,12 @@ export default function Terminal({ role, openingBook, seed = null, onExit }: Ter
             onFill={handleFill}
             onDecline={handleDecline}
           />
-          <ChartPanel instrument={instrument} series={series} markers={markers} />
+          <ChartPanel
+            instrument={instrument}
+            series={series}
+            markers={markers}
+            simSecondsPerTick={state.simSecondsPerTick}
+          />
           <PositionsPanel positions={positions} orders={state.orders} trades={state.trades} />
         </section>
 
@@ -158,9 +184,11 @@ export default function Terminal({ role, openingBook, seed = null, onExit }: Ter
             className="score-teaser"
             onClick={() => (closed ? setReportDismissed(false) : setScoreOpen(true))}
           >
-            <span className="score-teaser__label">{closed ? 'SESSION COMPLETE' : 'SESSION SCORECARD'}</span>
+            <span className="score-teaser__label">
+              {t(closed ? 'SESSION COMPLETE' : 'SESSION SCORECARD')}
+            </span>
             <span className="score-teaser__hint">
-              {closed ? 'Open the settlement report' : 'Hidden during the session · click to reveal'}
+              {t(closed ? 'Open the settlement report' : 'Hidden during the session · click to reveal')}
             </span>
           </button>
         </aside>
@@ -171,10 +199,10 @@ export default function Terminal({ role, openingBook, seed = null, onExit }: Ter
       {scoreOpen ? <ScoreDrawer score={score} onClose={() => setScoreOpen(false)} /> : null}
       {closed && !reportDismissed ? (
         <SettlementReport
-          desk={role === 'sales' ? 'SALES DESK' : 'MARKET MAKING DESK'}
+          desk={t(role === 'sales' ? 'SALES DESK' : 'MARKET MAKING DESK')}
           stats={settlement}
           score={score}
-          coaching={coachingLine(state)}
+          coaching={coachingText}
           onRestart={handleRestart}
           onClose={() => setReportDismissed(true)}
         />

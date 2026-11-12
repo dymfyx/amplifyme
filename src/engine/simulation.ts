@@ -29,7 +29,8 @@ import {
  *
  * 设计约束：
  * - 纯函数：`stepSession` 只依赖传入的 state，同样的 state 一定得到同样的结果（随机数种子存在 state 里）。
- * - 30 分钟 = 15 个交易日，所以 1 个 tick（250ms 真实时间）推进 48.75 个模拟秒。
+ * - 30 分钟 = 15 个交易日，所以 1 个 tick（250ms 真实时间）推进 48.75 个模拟秒；
+ *   5 / 15 分钟档位只是把同一段模拟时间压得更短（见 SESSION_TIERS），tick 频率不变。
  * - 报价/派单/成交都在引擎里结算，UI 只负责渲染和派发动作。
  */
 
@@ -39,7 +40,23 @@ export const DAY_SECONDS = 6.5 * 3600
 export const SESSION_DAYS = 15
 export const SESSION_SECONDS = DAY_SECONDS * SESSION_DAYS
 export const START_SECONDS = 9 * 3600 + 30 * 60
-export const SIM_SECONDS_PER_TICK = SESSION_SECONDS / ((30 * 60 * 1000) / TICK_MS)
+
+/** 练习时长档位：同样的 15 个模拟交易日，压缩进 5 / 15 / 30 分钟真实时间 */
+export type SessionMinutes = 5 | 15 | 30
+export const SESSION_TIERS: SessionMinutes[] = [5, 15, 30]
+export const DEFAULT_MINUTES: SessionMinutes = 30
+
+/**
+ * 每档位下一个 tick（250ms 真实时间）推进多少模拟秒：
+ * 5 分钟档 292.5 秒/tick、15 分钟档 97.5、30 分钟档 48.75。
+ * 档位只压缩时间轴，不改 tick 频率 —— 短档位反而更密（同样 20 条消息挤进更短的真实时间）。
+ */
+export const simSecondsPerTick = (minutes: SessionMinutes): number =>
+  SESSION_SECONDS / ((minutes * 60 * 1000) / TICK_MS)
+
+/** 默认 30 分钟档的节奏，保留给旧调用方与测试 */
+export const SIM_SECONDS_PER_TICK = simSecondsPerTick(DEFAULT_MINUTES)
+
 /**
  * 行情节奏：时钟每帧都走，价格与盘口每帧（0.25 秒真实时间）刷新一次，所以盘口是连续变的。
  * 每一帧的净变动都由「一笔微观流动 + 尚未释放完的新闻冲击」组成，没有无来源的随机噪声。
@@ -121,6 +138,8 @@ export interface InstrumentState {
   symbol: string
   name: string
   prevClose: number
+  /** 开盘价（建局时的 last），基准策略从这里起算 */
+  openPrice: number
   last: number
   lastMove: number
   sigma: number
@@ -202,6 +221,10 @@ export interface SimulationState {
   /** 每次价格刷新的解释记录，最新在末尾（PRICE TAPE 面板的数据源） */
   priceTape: PriceChangeRecord[]
   commission: number
+  /** 本局选择的练习时长档位（5 / 15 / 30 分钟） */
+  minutes: SessionMinutes
+  /** 每个 tick 推进的模拟秒数，由档位决定 */
+  simSecondsPerTick: number
   /** 可用资金（买入扣钱、卖出加钱），不能为负 */
   cash: number
   nextDispatchAt: number
@@ -218,6 +241,10 @@ export interface SessionMeta {
   speed: number
   latencyMs: number
   seed: number
+  /** 练习时长档位 */
+  minutes: SessionMinutes
+  /** 剩余真实时间（毫秒），顶栏倒计时用 */
+  timeLeftMs: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -319,7 +346,17 @@ function normaliseOpeningBook(book: OpeningPosition[]): EnginePosition[] {
     }))
 }
 
-export function createSession(seed = randomSeed(), openingBook: OpeningPosition[] = []): SimulationState {
+export interface SessionOptions {
+  /** 5 / 15 / 30 分钟档位，默认 30 */
+  minutes?: SessionMinutes
+}
+
+export function createSession(
+  seed = randomSeed(),
+  openingBook: OpeningPosition[] = [],
+  options: SessionOptions = {},
+): SimulationState {
+  const minutes = options.minutes ?? DEFAULT_MINUTES
   let rng = createSeed(seed)
   const instruments = UNIVERSE.map((entry) => {
     const prevClose = round2(entry.last / (1 + entry.changePct / 100))
@@ -339,6 +376,7 @@ export function createSession(seed = randomSeed(), openingBook: OpeningPosition[
       symbol: entry.symbol,
       name: entry.name,
       prevClose,
+      openPrice: entry.last,
       last: entry.last,
       lastMove: 0,
       sigma: entry.sigma,
@@ -361,6 +399,8 @@ export function createSession(seed = randomSeed(), openingBook: OpeningPosition[
     simSeconds: START_SECONDS,
     status: 'RUNNING',
     speed: 1,
+    minutes,
+    simSecondsPerTick: simSecondsPerTick(minutes),
     instruments,
     // 新的一局：持仓只来自开局自选的初始仓位，成交、委托、佣金、已实现盈亏都归零
     positions: normaliseOpeningBook(openingBook),
@@ -447,7 +487,7 @@ export function stepSession(state: SimulationState): SimulationState {
   if (state.status !== 'RUNNING') return state
 
   const tick = state.tick + 1
-  const simSeconds = state.simSeconds + SIM_SECONDS_PER_TICK
+  const simSeconds = state.simSeconds + state.simSecondsPerTick
   let rng = state.rng
   let telemetry = state.telemetry
 
@@ -865,7 +905,7 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
   const marketBook = state.instruments.find((item) => item.symbol === input.symbol)?.book
   const liveSpread = marketBook ? round2(marketBook.asks[0].price - marketBook.bids[0].price) : 0
   const responseTicks = rfq
-    ? Math.max(0, Math.round((state.simSeconds - rfq.createdAt) / SIM_SECONDS_PER_TICK))
+    ? Math.max(0, Math.round((state.simSeconds - rfq.createdAt) / state.simSecondsPerTick))
     : null
   const telemetry = recordQuote(state.telemetry, {
     id: quote.id,
@@ -1081,6 +1121,10 @@ export function selectDrivers(state: SimulationState): Record<string, PriceDrive
 }
 
 export function selectSessionMeta(state: SimulationState, latencyMs = 0): SessionMeta {
+  const elapsed = Math.max(0, state.simSeconds - state.startedAt)
+  const remainingSim = Math.max(0, SESSION_SECONDS - elapsed)
+  const timeLeftMs =
+    state.status === 'CLOSED' ? 0 : Math.round((remainingSim / state.simSecondsPerTick) * TICK_MS)
   return {
     // 收盘时刻 simSeconds 正好停在 15 个交易日的边界上，formatClock 会回绕成 09:30:00，
     // 所以结束态直接钉在最后一天的收盘时间。
@@ -1091,5 +1135,7 @@ export function selectSessionMeta(state: SimulationState, latencyMs = 0): Sessio
     speed: state.speed,
     latencyMs,
     seed: state.seed,
+    minutes: state.minutes,
+    timeLeftMs,
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { OrderRow, Position, TradeRow } from '../types'
+import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
 
 type TabKey = 'positions' | 'orders' | 'trades'
@@ -16,6 +17,7 @@ const money = (value: number) =>
 const signed = (value: number) => `${value > 0 ? '+' : ''}${money(value)}`
 
 export default function PositionsPanel({ positions, orders, trades }: PositionsPanelProps) {
+  const t = useT()
   const [tab, setTab] = useState<TabKey>('positions')
 
   const tabs: Array<{ key: TabKey; label: string; count: number }> = [
@@ -26,7 +28,7 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
 
   return (
     <section className="panel panel--positions">
-      <PanelHeader index="6" title="BOOK" />
+      <PanelHeader index="6" title={t('BOOK')} />
       <div className="tabs">
         {tabs.map((item) => (
           <button
@@ -36,7 +38,7 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
             aria-pressed={tab === item.key}
             onClick={() => setTab(item.key)}
           >
-            {item.label} <span className="tab__count">{item.count}</span>
+            {t(item.label)} <span className="tab__count">{item.count}</span>
           </button>
         ))}
       </div>
@@ -46,20 +48,20 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
           <table className="grid">
             <thead>
               <tr>
-                <th scope="col">SECURITY</th>
-                <th scope="col" className="num">NET POS</th>
-                <th scope="col" className="num">AVG PRICE</th>
-                <th scope="col" className="num">POS VALUE</th>
-                <th scope="col" className="num">UNREALISED</th>
-                <th scope="col" className="num">REALISED</th>
-                <th scope="col" className="num">NET P&amp;L</th>
+                <th scope="col">{t('SECURITY')}</th>
+                <th scope="col" className="num">{t('NET POS')}</th>
+                <th scope="col" className="num">{t('AVG PRICE')}</th>
+                <th scope="col" className="num">{t('POS VALUE')}</th>
+                <th scope="col" className="num">{t('UNREALISED')}</th>
+                <th scope="col" className="num">{t('REALISED')}</th>
+                <th scope="col" className="num">{t('NET P&L')}</th>
               </tr>
             </thead>
             <tbody>
               {positions.length === 0 && (
                 <tr>
                   <td className="empty" colSpan={7}>
-                    Flat — no open positions in this session
+                    {t('Flat — no open positions in this session')}
                   </td>
                 </tr>
               )}
@@ -88,20 +90,20 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
           <table className="grid">
             <thead>
               <tr>
-                <th scope="col">ID</th>
-                <th scope="col">TIME</th>
-                <th scope="col">SECURITY</th>
-                <th scope="col">SIDE</th>
-                <th scope="col" className="num">QTY</th>
-                <th scope="col" className="num">PRICE</th>
-                <th scope="col">STATUS</th>
+                <th scope="col">{t('ID')}</th>
+                <th scope="col">{t('TIME')}</th>
+                <th scope="col">{t('SECURITY')}</th>
+                <th scope="col">{t('SIDE')}</th>
+                <th scope="col" className="num">{t('QTY')}</th>
+                <th scope="col" className="num">{t('PRICE')}</th>
+                <th scope="col">{t('STATUS')}</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 && (
                 <tr>
                   <td className="empty" colSpan={7}>
-                    No orders yet — book one from the ticket
+                    {t('No orders yet — book one from the ticket')}
                   </td>
                 </tr>
               )}
@@ -110,11 +112,11 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
                   <td className="muted">{order.id}</td>
                   <td className="muted">{order.time}</td>
                   <td className="strong">{order.symbol}</td>
-                  <td className={order.side === 'BUY' ? 'side side--buy' : 'side side--sell'}>{order.side}</td>
+                  <td className={order.side === 'BUY' ? 'side side--buy' : 'side side--sell'}>{t(order.side)}</td>
                   <td className="num">{order.qty.toLocaleString('en-US')}</td>
                   <td className="num">{order.price.toFixed(2)}</td>
                   <td>
-                    <span className={`badge badge--${order.status.toLowerCase()}`}>{order.status}</span>
+                    <span className={`badge badge--${order.status.toLowerCase()}`}>{t(order.status)}</span>
                   </td>
                 </tr>
               ))}
@@ -126,20 +128,20 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
           <table className="grid">
             <thead>
               <tr>
-                <th scope="col">ID</th>
-                <th scope="col">TIME</th>
-                <th scope="col">SECURITY</th>
-                <th scope="col">SIDE</th>
-                <th scope="col" className="num">QTY</th>
-                <th scope="col" className="num">PRICE</th>
-                <th scope="col" className="num">FEE</th>
+                <th scope="col">{t('ID')}</th>
+                <th scope="col">{t('TIME')}</th>
+                <th scope="col">{t('SECURITY')}</th>
+                <th scope="col">{t('SIDE')}</th>
+                <th scope="col" className="num">{t('QTY')}</th>
+                <th scope="col" className="num">{t('PRICE')}</th>
+                <th scope="col" className="num">{t('FEE')}</th>
               </tr>
             </thead>
             <tbody>
               {trades.length === 0 && (
                 <tr>
                   <td className="empty" colSpan={7}>
-                    No fills yet in this session
+                    {t('No fills yet in this session')}
                   </td>
                 </tr>
               )}
@@ -148,7 +150,7 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
                   <td className="muted">{trade.id}</td>
                   <td className="muted">{trade.time}</td>
                   <td className="strong">{trade.symbol}</td>
-                  <td className={trade.side === 'BUY' ? 'side side--buy' : 'side side--sell'}>{trade.side}</td>
+                  <td className={trade.side === 'BUY' ? 'side side--buy' : 'side side--sell'}>{t(trade.side)}</td>
                   <td className="num">{trade.qty.toLocaleString('en-US')}</td>
                   <td className="num">{trade.price.toFixed(2)}</td>
                   <td className="num">{money(trade.fee)}</td>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Book, Instrument, QuoteRow, Rfq, Role, Side, TradeRow } from '../types'
 import type { FillInput, QuoteInput } from '../engine/simulation'
+import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
 
 const COMMISSION_RATE = 0.005
@@ -33,6 +34,7 @@ export default function TradeTicket({
   onFill,
   onDecline,
 }: TradeTicketProps) {
+  const t = useT()
   const [validFor, setValidFor] = useState('45')
   const [bidPrice, setBidPrice] = useState(() => book.bids[0].price.toFixed(2))
   const [offerPrice, setOfferPrice] = useState(() => book.asks[0].price.toFixed(2))
@@ -93,10 +95,17 @@ export default function TradeTicket({
     <section className="panel panel--ticket">
       <PanelHeader
         index="4"
-        title={isMaker ? 'QUOTE TICKET' : 'CLIENT ORDER'}
+        title={t(isMaker ? 'QUOTE TICKET' : 'CLIENT ORDER')}
         right={
           <span className="panel__meta">
-            {rfq ? `${rfq.client} · CLIENT ${rfq.side} ${rfq.qty} ${rfq.symbol}` : 'SYSTEM DISPATCH'}
+            {rfq
+              ? t('{client} · CLIENT {side} {qty} {symbol}', {
+                  client: rfq.client,
+                  side: t(rfq.side),
+                  qty: rfq.qty,
+                  symbol: rfq.symbol,
+                })
+              : t('SYSTEM DISPATCH')}
           </span>
         }
       />
@@ -104,14 +113,14 @@ export default function TradeTicket({
       <div className="ticket">
         <div className="ticket__grid">
           <label className="field">
-            <span className="field__label">Instrument</span>
+            <span className="field__label">{t('Instrument')}</span>
             <input className="field__input" value={instrument.symbol} readOnly tabIndex={-1} />
           </label>
 
           {isMaker ? (
             <>
               <label className="field">
-                <span className="field__label">Valid for (seconds)</span>
+                <span className="field__label">{t('Valid for (seconds)')}</span>
                 <input
                   className="field__input"
                   inputMode="numeric"
@@ -120,7 +129,7 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Bid price</span>
+                <span className="field__label">{t('Bid price')}</span>
                 <input
                   className="field__input"
                   inputMode="decimal"
@@ -129,7 +138,7 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Offer price</span>
+                <span className="field__label">{t('Offer price')}</span>
                 <input
                   className="field__input"
                   inputMode="decimal"
@@ -138,7 +147,7 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Bid volume</span>
+                <span className="field__label">{t('Bid volume')}</span>
                 <input
                   className="field__input"
                   inputMode="numeric"
@@ -147,7 +156,7 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Offer volume</span>
+                <span className="field__label">{t('Offer volume')}</span>
                 <input
                   className="field__input"
                   inputMode="numeric"
@@ -159,12 +168,12 @@ export default function TradeTicket({
           ) : (
             <>
               <label className="field">
-                <span className="field__label">Client</span>
+                <span className="field__label">{t('Client')}</span>
                 <input className="field__input" value={rfq?.client ?? 'AM-39'} readOnly tabIndex={-1} />
               </label>
               <div className="field">
-                <span className="field__label">Desk side</span>
-                <div className="segmented" role="group" aria-label="Side">
+                <span className="field__label">{t('Desk side')}</span>
+                <div className="segmented" role="group" aria-label={t('Side')}>
                   {(['BUY', 'SELL'] as Side[]).map((option) => (
                     <button
                       key={option}
@@ -173,13 +182,13 @@ export default function TradeTicket({
                       aria-pressed={side === option}
                       onClick={() => setSide(option)}
                     >
-                      {option}
+                      {t(option)}
                     </button>
                   ))}
                 </div>
               </div>
               <label className="field">
-                <span className="field__label">Quantity</span>
+                <span className="field__label">{t('Quantity')}</span>
                 <input
                   className="field__input"
                   inputMode="numeric"
@@ -188,7 +197,7 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Limit price</span>
+                <span className="field__label">{t('Limit price')}</span>
                 <input
                   className="field__input"
                   inputMode="decimal"
@@ -197,7 +206,7 @@ export default function TradeTicket({
                 />
               </label>
               <label className="field">
-                <span className="field__label">Client ref</span>
+                <span className="field__label">{t('Client ref')}</span>
                 <input className="field__input" value={rfq?.id ?? 'MANUAL'} readOnly tabIndex={-1} />
               </label>
             </>
@@ -206,30 +215,30 @@ export default function TradeTicket({
 
         <div className="ticket__summary">
           <div className="stat">
-            <span className="stat__label">LIVE MKT</span>
+            <span className="stat__label">{t('LIVE MKT')}</span>
             <span className="stat__value stat__value--live">
               {book.bids[0].price.toFixed(2)} / {book.asks[0].price.toFixed(2)}
             </span>
           </div>
           <div className="stat">
-            <span className="stat__label">NOTIONAL</span>
+            <span className="stat__label">{t('NOTIONAL')}</span>
             <span className="stat__value">${money(notional)}</span>
           </div>
           <div className="stat">
-            <span className="stat__label">COMMISSION</span>
+            <span className="stat__label">{t('COMMISSION')}</span>
             <span className="stat__value">${money(commission)}</span>
           </div>
           <div className="stat">
-            <span className="stat__label">AVAILABLE CASH</span>
+            <span className="stat__label">{t('AVAILABLE CASH')}</span>
             <span className="stat__value stat__value--live">${money(cash)}</span>
           </div>
           <div className="ticket__actions">
             <button type="button" className="btn btn--primary" onClick={onSend}>
-              {isMaker ? 'SEND QUOTE' : 'FILL CLIENT ORDER'}
+              {t(isMaker ? 'SEND QUOTE' : 'FILL CLIENT ORDER')}
             </button>
             {!isMaker && (
               <button type="button" className="btn btn--danger" onClick={onDeclineClick}>
-                DECLINE
+                {t('DECLINE')}
               </button>
             )}
           </div>
@@ -251,7 +260,7 @@ export default function TradeTicket({
               onClick={() => setTab('live')}
               aria-pressed={tab === 'live'}
             >
-              LIVE QUOTES
+              {t('LIVE QUOTES')}
             </button>
             <button
               type="button"
@@ -259,21 +268,21 @@ export default function TradeTicket({
               onClick={() => setTab('old')}
               aria-pressed={tab === 'old'}
             >
-              OLD QUOTES
+              {t('OLD QUOTES')}
             </button>
           </div>
           <div className="table-wrap">
             <table className="grid grid--quotes">
               <thead>
                 <tr>
-                  <th scope="col">ID</th>
-                  <th scope="col">SECURITY</th>
-                  <th scope="col" className="num">BID VOL</th>
-                  <th scope="col" className="num">BID</th>
-                  <th scope="col" className="num">OFFER</th>
-                  <th scope="col" className="num">OFFER VOL</th>
-                  <th scope="col" className="num">VALID FOR</th>
-                  <th scope="col">STATUS</th>
+                  <th scope="col">{t('ID')}</th>
+                  <th scope="col">{t('SECURITY')}</th>
+                  <th scope="col" className="num">{t('BID VOL')}</th>
+                  <th scope="col" className="num">{t('BID')}</th>
+                  <th scope="col" className="num">{t('OFFER')}</th>
+                  <th scope="col" className="num">{t('OFFER VOL')}</th>
+                  <th scope="col" className="num">{t('VALID FOR')}</th>
+                  <th scope="col">{t('STATUS')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -287,16 +296,16 @@ export default function TradeTicket({
                     <td className="num">{quote.offerVolume.toLocaleString('en-US')}</td>
                     <td className="num">{quote.validFor}s</td>
                     <td>
-                      <span className={`badge badge--${quote.status.toLowerCase()}`}>{quote.status}</span>
+                      <span className={`badge badge--${quote.status.toLowerCase()}`}>{t(quote.status)}</span>
                     </td>
                   </tr>
                 ))}
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="empty">
-                      {tab === 'live'
+                      {t(tab === 'live'
                         ? 'No live quotes — send one from the ticket above'
-                        : 'No filled or expired quotes yet'}
+                        : 'No filled or expired quotes yet')}
                     </td>
                   </tr>
                 ) : null}
@@ -308,20 +317,20 @@ export default function TradeTicket({
         <>
           <div className="tabs">
             <button type="button" className="tab tab--on">
-              RECENT FILLS
+              {t('RECENT FILLS')}
             </button>
           </div>
           <div className="table-wrap">
             <table className="grid grid--quotes">
               <thead>
                 <tr>
-                  <th scope="col">TIME</th>
-                  <th scope="col">SECURITY</th>
-                  <th scope="col">SIDE</th>
-                  <th scope="col" className="num">QTY</th>
-                  <th scope="col" className="num">PRICE</th>
-                  <th scope="col" className="num">FEE</th>
-                  <th scope="col">ID</th>
+                  <th scope="col">{t('TIME')}</th>
+                  <th scope="col">{t('SECURITY')}</th>
+                  <th scope="col">{t('SIDE')}</th>
+                  <th scope="col" className="num">{t('QTY')}</th>
+                  <th scope="col" className="num">{t('PRICE')}</th>
+                  <th scope="col" className="num">{t('FEE')}</th>
+                  <th scope="col">{t('ID')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -329,7 +338,7 @@ export default function TradeTicket({
                   <tr key={fill.id} className="row">
                     <td className="muted">{fill.time}</td>
                     <td className="strong">{fill.symbol}</td>
-                    <td className={fill.side === 'BUY' ? 'num--up' : 'num--down'}>{fill.side}</td>
+                    <td className={fill.side === 'BUY' ? 'num--up' : 'num--down'}>{t(fill.side)}</td>
                     <td className="num">{fill.qty.toLocaleString('en-US')}</td>
                     <td className="num">{fill.price.toFixed(2)}</td>
                     <td className="num">{fill.fee.toFixed(2)}</td>
@@ -339,7 +348,7 @@ export default function TradeTicket({
                 {recentFills.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="empty">
-                      No fills yet — the first client order will land here
+                      {t('No fills yet — the first client order will land here')}
                     </td>
                   </tr>
                 ) : null}

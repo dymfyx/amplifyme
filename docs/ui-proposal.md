@@ -485,3 +485,29 @@ P0 已交付：
 - UI：TopBar 在固定种子时显示 `SHARED SEED` chip，RESTART 的 title 改为「重放同局」；状态栏 `SEED nnnnnn` 一直是权威值。
 - 同一 seed 下新闻时间轴、盘口随机量与价格路径完全一致（引擎是纯函数），只有玩家动作会分叉 —— 这是「全组练同一道题」的前提。
 - 测试：`src/test/app.test.tsx` 增加「pins a shared seed from the url hash」「replays the pinned seed when the desk is restarted」，总测试数 84。
+
+## 17. 语言、三档时长与基准（P2.7）
+
+### 需求
+
+- 入口页可选语言：默认英文，可切中文。
+- 入口页可选练习时长：5 / 15 / 30 分钟；选完再进台面。
+- 台面顶栏显示本局剩余时间与档位，跑完自动结算。
+- 分享链接要带语言与时长，保证全组同一道题。
+- 结算报告加基准算法，显示是否跑赢基准。
+
+### 实现
+
+- `src/i18n.tsx`：`Language = 'en' | 'zh'`、`I18nProvider`、`useT()`；**英文原文即 key**，字典查不到回退英文；`fill()` 负责 `{var}` 插值，未包 Provider 的组件单测也走同一套插值。
+- 字典分三份：`zh-chrome.ts`（入口页/初始持仓页/顶栏/状态栏/图表/评分抽屉/结算报告，约 140 条）、`zh-panels.ts`（八个台面面板，85 条，由 subagent 完成）、`zh-data.ts`（引擎动态字符串：12 个流动驱动、20 个头条短标签、6 条派单备注、新闻标签）。台面代号 `S&T · SALES` / `S&T · MARKET MAKING` 保留英文；头条正文保留英文（作为市场内容）。
+- 时长档位在引擎层：`SessionMinutes = 5 | 15 | 30`、`simSecondsPerTick(minutes) = SESSION_SECONDS / ((minutes*60*1000)/TICK_MS)`（30→48.75、15→97.5、5→292.5 模拟秒/tick）。**tick 频率（250ms）不变**，只改每 tick 覆盖的模拟时间，因此短档不会变"平"，只是时间轴压缩，20 条头条仍全部播放。
+- `createSession(seed, openingBook, { minutes })`；`SessionMeta` 增加 `minutes` 与 `timeLeftMs`；`selectSessionMeta` 在收盘时 `timeLeftMs = 0`。
+- 顶栏 `TopBar` 增加 `TIME LEFT mm:ss` + `{n} MIN` 档位；≤30 秒变红。结算时 `Terminal` 检测 `status === 'CLOSED'` 自动打开结算报告。
+- 深链：`#<role>?seed=…&lang=en|zh&minutes=5|15|30`，非法值回落默认（30 分钟 / 英文）；`#market-maker?seed=20261112&lang=zh&minutes=5` 即完整作业链接。
+- 基准：`benchmark(state)` 把 `STARTING_CASH` 等权分给五只股票，按开盘价（`InstrumentState.openPrice`）买入并持有到收盘；结算统计新增 `benchmarkPnl / benchmarkReturnPct / alpha / beatsBenchmark`，`alpha = 总盈亏 − 基准盈亏`。报告里新增 `BENCHMARK · BUY & HOLD` 对比条与 `YOU BEAT THE BENCHMARK` / `BEHIND THE BENCHMARK`。
+- 评分口径不变（六维 + composite + percentile），但 `coachingLine` 改为 `coachingSummary(state)` + `adviceFor(key)`，点评句可整体翻译。
+
+### 测试与验收
+
+- 94 例全绿：engine 33（含档位 `simSecondsPerTick`、5 分钟档 1,200 tick 收盘与 `timeLeftMs` 归零、基准与手工计算一致、空仓跑输/跑赢基准的判定）+ scoring 10 + app 34（语言切换、时长带入台面并显示倒计时、深链 `lang/zh&minutes/5`、5 分钟档自动结算 + BENCHMARK）+ launcher 7 + deploy 10。
+- 截图：`.tmp/tier-entry-en.png` / `.tmp/tier3-entry-zh.png`（入口双语 + 时长条）、`.tmp/tier-desk5.png`（5 分钟档顶栏 `TIME LEFT 04:56 5 MIN`）、`.tmp/tier2-desk-zh2.png` / `.tmp/tier3-desk-zh-1280.png`（中文台面，1280 不裁切）、`.tmp/tier3-report-zh.png`（中文结算报告含基准对比）。

@@ -1,6 +1,5 @@
 import type { ScoreCard, ScoreDimension } from '../types'
 import { STARTING_CASH, selectPnl, type SimulationState } from './simulation'
-import { NEWS_REACTION_TICKS } from './telemetry'
 
 /**
  * 评分：把遥测事件折算成 0–100 的六个维度 + 一个加权综合分。
@@ -49,6 +48,14 @@ export interface SettlementStats {
   avgGross: number
   headlines: number
   headlinesAnswered: number
+  /** 基准策略（五只股票等权买入并持有）的盈亏，用于结算时对比 */
+  benchmarkPnl: number
+  /** 基准收益率（%） */
+  benchmarkReturnPct: number
+  /** 相对基准的超额（我们的 total − benchmarkPnl） */
+  alpha: number
+  /** 是否跑赢基准 */
+  beatsBenchmark: boolean
 }
 
 export function selectSettlement(state: SimulationState): SettlementStats {
@@ -86,6 +93,33 @@ export function selectSettlement(state: SimulationState): SettlementStats {
     avgGross: Math.round(mean(grossSamples)),
     headlines: telemetry.news.length,
     headlinesAnswered: telemetry.news.filter((item) => item.traded).length,
+    ...benchmark(state),
+  }
+}
+
+/**
+ * 基准策略：开局把 2000 万预算等权分给五个名字、按开盘价买入并持有到收盘。
+ * 不做任何交易，只承担市场风险 —— 用来回答「我这一局到底有没有跑赢躺平」。
+ */
+export function benchmark(state: SimulationState): {
+  benchmarkPnl: number
+  benchmarkReturnPct: number
+  alpha: number
+  beatsBenchmark: boolean
+} {
+  const notional = STARTING_CASH / Math.max(1, state.instruments.length)
+  const raw = state.instruments.reduce(
+    (total, instrument) =>
+      total + notional * ((instrument.last - instrument.openPrice) / instrument.openPrice),
+    0,
+  )
+  const benchmarkPnl = Math.round(raw * 100) / 100
+  const total = selectPnl(state).total
+  return {
+    benchmarkPnl,
+    benchmarkReturnPct: Math.round((benchmarkPnl / STARTING_CASH) * 10000) / 100,
+    alpha: Math.round((total - benchmarkPnl) * 100) / 100,
+    beatsBenchmark: total > benchmarkPnl,
   }
 }
 
@@ -101,7 +135,7 @@ export function scoreSession(state: SimulationState): ScoreCard {
   const avgRatio = spreadRatios.length === 0 ? 1.6 : mean(spreadRatios)
   const widthQuality = 100 * Math.exp(-Math.abs(Math.log(avgRatio / 1.6)))
   const declineRate = telemetry.rfqs === 0 ? 0 : telemetry.declines / telemetry.rfqs
-  // 一张报价都没出过就没有“报价纪律”可言 —— 给中性分，别让不交易也拿满分
+  // 一张报价都没出过就没有「报价纪律」可言 —— 给中性分，别让不交易也拿满分
   const discipline = spreadRatios.length === 0 ? 50 : clamp(widthQuality - declineRate * 25)
 
   const responses = telemetry.quotes
@@ -145,15 +179,31 @@ export function scoreSession(state: SimulationState): ScoreCard {
   return { composite, percentile, dimensions }
 }
 
-/** 结算报告里的一句话点评，按最难看的那个维度说话 */
-export function coachingLine(state: SimulationState): string {
+/** 结算报告里的点评：最强/最弱维度 + 针对最弱维度的建议（文案由 UI 翻译） */
+export type AdviceKey =
+  | 'returns'
+  | 'discipline'
+  | 'reaction'
+  | 'resilience'
+  | 'management'
+  | 'adaptability'
+  | 'process'
+
+export interface Coaching {
+  strongest: string
+  weakest: string
+  adviceKey: AdviceKey
+}
+
+export function coachingSummary(state: SimulationState): Coaching {
   const score = scoreSession(state)
   const worst = [...score.dimensions].sort((a, b) => a.value - b.value)[0]
   const best = [...score.dimensions].sort((a, b) => b.value - a.value)[0]
-  return `Strongest: ${best.label.toLowerCase()}. Weakest: ${worst.label.toLowerCase()} — ${advice(worst.key)}`
+  return { strongest: best.label, weakest: worst.label, adviceKey: worst.key as AdviceKey }
 }
 
-function advice(key: string): string {
+/** 每个维度的建议原文（英文），中文翻译见 src/i18n/zh-chrome.ts */
+export function adviceFor(key: AdviceKey): string {
   switch (key) {
     case 'returns':
       return 'size up the good trades and cut the ones that go against you early.'
@@ -166,7 +216,7 @@ function advice(key: string): string {
     case 'management':
       return 'carry less gross risk into headlines.'
     case 'adaptability':
-      return `trade within ${NEWS_REACTION_TICKS} ticks of a headline instead of waiting it out.`
+      return 'trade within {ticks} ticks of a headline instead of waiting it out.'
     default:
       return 'keep the same process and repeat it.'
   }

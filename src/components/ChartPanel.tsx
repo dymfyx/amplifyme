@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Instrument } from '../types'
+import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
 
 const VIEW_W = 1000
@@ -12,14 +13,15 @@ const RANGES = ['30M', '2H', '6H', '1D'] as const
 type RangeKey = (typeof RANGES)[number]
 
 /**
- * 一根 = 一次行情刷新（0.25 秒真实时间 ≈ 48.75 个模拟秒），所以 1 个交易日正好 480 根。
- * 窗口标签按模拟时间给，档位换算成对应的根数。
+ * 窗口标签按「模拟时间」给，但一根 = 一次行情刷新。
+ * 时间轴被档位压缩后，一根覆盖的模拟时间变长（5 分钟档 ≈ 292.5 秒/根），
+ * 所以同样的 6H 窗口在不同档位下根数不同 —— 这里按 simSecondsPerTick 换算。
  */
-const RANGE_POINTS: Record<RangeKey, number> = {
-  '30M': 37,
-  '2H': 148,
-  '6H': 443,
-  '1D': 480,
+const RANGE_SECONDS: Record<RangeKey, number> = {
+  '30M': 1800,
+  '2H': 7200,
+  '6H': 21600,
+  '1D': 23400,
 }
 
 export interface ChartMarker {
@@ -31,11 +33,16 @@ interface ChartPanelProps {
   instrument: Instrument
   series: number[]
   markers: ChartMarker[]
+  /** 每个 tick 推进多少模拟秒；用来把时间窗口换算成根数 */
+  simSecondsPerTick: number
 }
 
-export default function ChartPanel({ instrument, series, markers }: ChartPanelProps) {
+export default function ChartPanel({ instrument, series, markers, simSecondsPerTick }: ChartPanelProps) {
+  const t = useT()
   const [range, setRange] = useState<RangeKey>('6H')
-  const points = Math.min(RANGE_POINTS[range], series.length)
+  const pointsFor = (key: RangeKey) =>
+    Math.max(6, Math.round(RANGE_SECONDS[key] / Math.max(1, simSecondsPerTick)))
+  const points = Math.min(pointsFor(range), series.length)
   const values = series.slice(-points)
   const offset = series.length - values.length
   const visibleMarkers = markers
@@ -68,7 +75,7 @@ export default function ChartPanel({ instrument, series, markers }: ChartPanelPr
     <section className="panel panel--chart">
       <PanelHeader
         index="5"
-        title="CHARTS"
+        title={t('CHARTS')}
         right={
           <div className="chart-ranges" role="group" aria-label="Chart range">
             {RANGES.map((option) => (
@@ -157,13 +164,13 @@ export default function ChartPanel({ instrument, series, markers }: ChartPanelPr
         <div className="chart__legend">
           {[...new Set(visibleMarkers.map((marker) => marker.label))].map((label) => (
             <span key={label} className="chart__legend-item">
-              <i className="chart__dot" /> {label}
+              <i className="chart__dot" /> {t(label)}
             </span>
           ))}
           {visibleMarkers.length === 0 ? (
-            <span className="chart__legend-item muted">No events in window</span>
+            <span className="chart__legend-item muted">{t('No events in window')}</span>
           ) : null}
-          <span className="chart__legend-item chart__legend-item--end">VOLUME</span>
+          <span className="chart__legend-item chart__legend-item--end">{t('VOLUME')}</span>
         </div>
       </div>
     </section>

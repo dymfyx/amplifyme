@@ -54,7 +54,17 @@ picker. Deep links (`#sales`, `#market-maker`) skip the setup step and open flat
 
 ## Simulation clock
 
-The session compresses 15 trading days (09:30-16:00 each) into 30 minutes of real time.
+The session compresses 15 trading days (09:30-16:00 each) into 5, 15 or 30 minutes of real time, picked on the
+entry screen:
+
+| Session | Simulated seconds per tick | Ticks in the session | Chart bar |
+|---|---|---|---|
+| `5 MIN` | 292.5 | 1,200 | ~4.9 simulated minutes |
+| `15 MIN` | 97.5 | 3,600 | ~1.6 simulated minutes |
+| `30 MIN` (default) | 48.75 | 7,200 | 48.75 simulated seconds |
+
+The tick cadence never changes — only the simulated span each tick covers. A 5-minute session therefore keeps the
+same dense tape and the same 20 headlines, so it reads as a compressed day rather than a flat, slow one.
 
 | Control | Behaviour |
 |---|---|
@@ -63,9 +73,10 @@ The session compresses 15 trading days (09:30-16:00 each) into 30 minutes of rea
 | `SPACE` | Pause / resume |
 | `1` `2` `4` | Pick a speed |
 
-Every engine tick moves the clock ~48.75 simulated seconds, counts quote validity down, and can fill a resting
-quote against the client. Positions are marked to market and `P&L`, `NET EXPOSURE` and `COMMISSION` recompute on
-every tick.
+Every engine tick moves the clock by the tier's simulated span (48.75 s at 30 minutes), counts quote validity
+down, and can fill a resting quote against the client. Positions are marked to market and `P&L`, `NET EXPOSURE`
+and `COMMISSION` recompute on every tick. The top bar shows the time left in real minutes and the tier (`TIME
+LEFT 04:20 5 MIN`); when it hits zero the market closes and the settlement report opens by itself.
 
 ### Market data cadence
 
@@ -137,11 +148,26 @@ report.
 `COMPOSITE` weights them 25 / 20 / 15 / 15 / 15 / 10 and maps it to a percentile. A never-traded session scores
 50 everywhere — doing nothing is not a high score.
 
-The `SCORE` button opens a live drawer with the same numbers during the session. When the 15 days run out the
-clock stops at `16:00:00`, and a **settlement report** opens: total P&L breakdown, flow stats (fills, hit ratio,
+The `SCORE` button opens a live drawer with the same numbers during the session. When the clock runs out the
+market stops at `16:00:00`, and a **settlement report** opens: total P&L breakdown, flow stats (fills, hit ratio,
 average edge vs the mid, quotes sent, quote width vs market), risk stats (peak P&L, max drawdown, average gross
 exposure, median RFQ response, headlines traded) and the scorecard with a one-line coaching note. `RUN ANOTHER
 SESSION` restarts with a fresh seed; `REVIEW THE DESK` closes the report to inspect the tape.
+
+### Benchmark
+
+The report also shows the passive alternative: **`BENCHMARK · BUY & HOLD`** splits the $20M cash budget equally
+across the five names at their opening prices and holds them to the close. The desk sees the benchmark P&L, its
+return, `ALPHA VS BENCHMARK` (your total minus the benchmark) and either `YOU BEAT THE BENCHMARK` or `BEHIND THE
+BENCHMARK` — so a flat book is not a free pass, and a profitable session can still lag the market.
+
+## Language
+
+The entry screen toggles between English (default) and 中文. The choice covers the entry screen, the setup screen,
+every panel, the score drawer and the settlement report; headlines, tickers and per-name driver remarks stay in
+English on purpose (they are the market content). Translations live in `src/i18n/zh-chrome.ts` (chrome),
+`src/i18n/zh-panels.ts` (the eight tape panels) and `src/i18n/zh-data.ts` (engine strings such as flow drivers and
+dispatch notes); anything not translated falls back to the English source text.
 
 ## Desktop shortcut
 
@@ -164,7 +190,16 @@ Clicking it again while the server is up just opens the browser — no duplicate
 ## Deep links
 
 Append `#sales` or `#market-maker` to the URL to open a desk directly (handy for screenshots and for sharing a
-broken layout): `http://localhost:5173/#market-maker`.
+broken layout): `http://localhost:5173/#market-maker`. Query parameters pin the group exercise:
+
+| Parameter | Values | Effect |
+|---|---|---|
+| `seed` | integer | Pins the scenario; everyone opening the link sees the same prices, headlines and path |
+| `lang` | `en` / `zh` | Entry language (default `en`) |
+| `minutes` | `5` / `15` / `30` | Session length (default `30`) |
+
+`#market-maker?seed=20261112&lang=zh&minutes=5` is therefore a complete assignment: same desk, same market, Chinese
+UI, five-minute round. Ignored or invalid values fall back to the defaults.
 
 ## Project layout
 
@@ -225,6 +260,8 @@ Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-l
 | P1 (done) | Clock control, tick stream, quotes/orders, fills, mark-to-market P&L |
 | P2 (done) | Decision telemetry -> live scorecard + settlement report, 5 bps commission, 0.25 s tape |
 | P2.5 (done) | Event-driven prices with named drivers, PRICE TAPE panel, static hosting / single-file build |
+| P2.6 (done) | Pinned-seed share links (?seed=), GitHub Pages deployment |
+| P2.7 (done) | EN/中文 UI, 5/15/30-minute tiers with a live countdown and auto-settlement, buy-and-hold benchmark |
 | P3 | Polish: replay, sounds, resizable panels, session save/restore |
 
 ## Working rules

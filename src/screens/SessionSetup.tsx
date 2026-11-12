@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import type { Role } from '../types'
 import { UNIVERSE } from '../engine/scenario'
-import { STARTING_CASH, type OpeningPosition } from '../engine/simulation'
+import {
+  DEFAULT_MINUTES,
+  STARTING_CASH,
+  type OpeningPosition,
+  type SessionMinutes,
+} from '../engine/simulation'
+import { useT } from '../i18n'
 
 type Mode = 'flat' | 'custom'
 
@@ -12,6 +18,7 @@ interface DraftRow {
 
 interface SessionSetupProps {
   role: Role
+  minutes?: SessionMinutes
   onStart: (openingBook: OpeningPosition[]) => void
   onBack: () => void
 }
@@ -22,14 +29,23 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   })}`
 
-const roleLabel = (role: Role) => (role === 'sales' ? 'Sales' : 'Market Maker')
+const ROLE_LABEL: Record<Role, string> = {
+  sales: 'Sales',
+  'market-maker': 'Market Maker',
+}
 
 const emptyDrafts = (): Record<string, DraftRow> =>
   Object.fromEntries(
     UNIVERSE.map((entry) => [entry.symbol, { qty: '', price: entry.last.toFixed(2) }]),
   )
 
-export default function SessionSetup({ role, onStart, onBack }: SessionSetupProps) {
+export default function SessionSetup({
+  role,
+  minutes = DEFAULT_MINUTES,
+  onStart,
+  onBack,
+}: SessionSetupProps) {
+  const t = useT()
   const [mode, setMode] = useState<Mode>('flat')
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>(emptyDrafts)
 
@@ -67,10 +83,12 @@ export default function SessionSetup({ role, onStart, onBack }: SessionSetupProp
         <header className="setup__header">
           <span className="brand-mark">Λ</span>
           <div>
-            <h1 className="role-select__title">Opening book</h1>
+            <h1 className="role-select__title">{t('Opening book')}</h1>
             <p className="role-select__subtitle">
-              {roleLabel(role)} desk · choose what inventory you start the session with — 30 minutes,
-              15 simulated trading days, 5 names.
+              {t(
+                '{desk} desk · choose what inventory you start the session with — {minutes} minutes, 15 simulated trading days, 5 names.',
+                { desk: t(ROLE_LABEL[role]), minutes },
+              )}
             </p>
           </div>
         </header>
@@ -82,8 +100,8 @@ export default function SessionSetup({ role, onStart, onBack }: SessionSetupProp
             aria-pressed={mode === 'flat'}
             onClick={() => setMode('flat')}
           >
-            <span className="setup__mode-title">FLAT</span>
-            <span className="setup__mode-note">Start with no positions — build the book yourself.</span>
+            <span className="setup__mode-title">{t('FLAT')}</span>
+            <span className="setup__mode-note">{t('Start with no positions — build the book yourself.')}</span>
           </button>
           <button
             type="button"
@@ -91,8 +109,8 @@ export default function SessionSetup({ role, onStart, onBack }: SessionSetupProp
             aria-pressed={mode === 'custom'}
             onClick={() => setMode('custom')}
           >
-            <span className="setup__mode-title">CUSTOM BOOK</span>
-            <span className="setup__mode-note">Carry in a position per name, long or short.</span>
+            <span className="setup__mode-title">{t('CUSTOM BOOK')}</span>
+            <span className="setup__mode-note">{t('Carry in a position per name, long or short.')}</span>
           </button>
         </div>
 
@@ -101,10 +119,16 @@ export default function SessionSetup({ role, onStart, onBack }: SessionSetupProp
             <table className="grid grid--setup">
               <thead>
                 <tr>
-                  <th scope="col">SECURITY</th>
-                  <th scope="col" className="num">OPENING QTY</th>
-                  <th scope="col" className="num">AVG PRICE</th>
-                  <th scope="col" className="num">NOTIONAL</th>
+                  <th scope="col">{t('SECURITY')}</th>
+                  <th scope="col" className="num">
+                    {t('OPENING QTY')}
+                  </th>
+                  <th scope="col" className="num">
+                    {t('AVG PRICE')}
+                  </th>
+                  <th scope="col" className="num">
+                    {t('NOTIONAL')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -141,45 +165,47 @@ export default function SessionSetup({ role, onStart, onBack }: SessionSetupProp
               </tbody>
             </table>
             <p className="setup__hint">
-              Negative quantity = short. Prices default to the opening print; the position is marked at
-              that average, so P&amp;L starts at zero.
+              {t(
+                'Negative quantity = short. Prices default to the opening print; the position is marked at that average, so P&L starts at zero.',
+              )}
             </p>
           </div>
         )}
 
         <div className="setup__summary">
           <div className="setup__stat">
-            <span className="setup__stat-label">OPENING GROSS</span>
+            <span className="setup__stat-label">{t('OPENING GROSS')}</span>
             <span className="setup__stat-value">{money(gross)}</span>
           </div>
           <div className="setup__stat">
-            <span className="setup__stat-label">OPENING NET</span>
+            <span className="setup__stat-label">{t('OPENING NET')}</span>
             <span className={net < 0 ? 'setup__stat-value num--down' : 'setup__stat-value'}>
               {money(net)}
             </span>
           </div>
           <div className="setup__stat">
-            <span className="setup__stat-label">TRADING CASH</span>
+            <span className="setup__stat-label">{t('TRADING CASH')}</span>
             <span className="setup__stat-value">{money(STARTING_CASH)}</span>
           </div>
         </div>
 
         <p className="setup__hint setup__hint--wide">
-          The opening book is separate from the $20M trading budget: it is financed at the start and only
-          shows up in P&amp;L. Cash moves when you trade against it.
+          {t(
+            'The opening book is separate from the $20M trading budget: it is financed at the start and only shows up in P&L. Cash moves when you trade against it.',
+          )}
         </p>
 
         <div className="setup__actions">
           <button type="button" className="btn btn--ghost" onClick={onBack}>
-            ← CHANGE DESK
+            {t('← CHANGE DESK')}
           </button>
           <button
             type="button"
             className="btn btn--primary setup__start"
-            aria-label={`Open the ${roleLabel(role)} desk`}
+            aria-label={`Open the ${ROLE_LABEL[role]} desk`}
             onClick={() => onStart(openingBook)}
           >
-            OPEN DESK →
+            {t('OPEN DESK →')}
           </button>
         </div>
       </div>

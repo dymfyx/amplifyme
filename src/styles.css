@@ -1970,3 +1970,98 @@ table.grid.grid--setup tbody tr:last-child td {
   grid-template-columns: 1fr 1fr;
   gap: 8px 20px;
 }
+/* 入口设置：语言 + 时长档位 */
+.entry-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 32px;
+  margin: 0 0 18px;
+}
+.entry-settings__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.entry-settings__label {
+  margin-right: 6px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--text-2);
+}
+
+/* 顶栏倒计时 + 档位 */
+.topbar__clock {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.topbar__clock-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-2);
+}
+.topbar__clock-value {
+  font-size: 12px;
+  color: var(--text-1);
+}
+.topbar__clock-tier {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.topbar__clock--warn {
+  border-color: rgba(255, 92, 108, 0.55);
+}
+.topbar__clock--warn .topbar__clock-value {
+  color: var(--down);
+}
+
+/* 结算报告：基准对比 */
+.report__bench {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(76, 141, 255, 0.05);
+}
+.report__bench--win {
+  border-color: rgba(46, 204, 143, 0.45);
+  background: rgba(46, 204, 143, 0.07);
+}
+.report__bench-side {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.report__bench-side--right {
+  align-items: flex-end;
+  text-align: right;
+}
+.report__bench-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-2);
+}
+.report__bench-value {
+  font-size: 16px;
+}
+.report__bench-note {
+  font-size: 10px;
+  color: var(--text-2);
+}
+.report__bench-verdict {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--warn);
+}
+.report__bench-verdict--win {
+  color: var(--up);
+}

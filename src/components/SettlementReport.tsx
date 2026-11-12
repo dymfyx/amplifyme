@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import type { ScoreCard } from '../types'
 import type { SettlementStats } from '../engine/scoring'
+import { STARTING_CASH } from '../engine/simulation'
+import { useT } from '../i18n'
 
 interface SettlementReportProps {
   desk: string
@@ -14,6 +16,11 @@ interface SettlementReportProps {
 const money = (value: number) =>
   `${value < 0 ? '-$' : '$'}${Math.abs(value).toLocaleString('en-US', {
     minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`
+
+const signedMoney = (value: number) =>
+  `${value > 0 ? '+' : value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString('en-US', {
     maximumFractionDigits: 0,
   })}`
 
@@ -32,6 +39,8 @@ export default function SettlementReport({
   onRestart,
   onClose,
 }: SettlementReportProps) {
+  const t = useT()
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -41,6 +50,7 @@ export default function SettlementReport({
   }, [onClose])
 
   const tone = stats.total < 0 ? 'num--down' : 'num--up'
+  const ourReturnPct = (stats.total / STARTING_CASH) * 100
 
   return (
     <div className="report-backdrop" data-testid="settlement-backdrop" onClick={onClose}>
@@ -53,103 +63,138 @@ export default function SettlementReport({
       >
         <header className="report__head">
           <div>
-            <span className="report__eyebrow">SESSION COMPLETE · {desk}</span>
+            <span className="report__eyebrow">
+              {t('SESSION COMPLETE · {desk}', { desk })}
+            </span>
             <h2 id="settlement-title" className="report__title">
-              Settlement report
+              {t('Settlement report')}
             </h2>
           </div>
           <button type="button" className="btn btn--ghost" onClick={onClose} aria-label="Close settlement report">
-            CLOSE
+            {t('CLOSE')}
           </button>
         </header>
 
         <div className="report__hero">
           <div>
-            <span className="report__hero-label">TOTAL P&amp;L</span>
+            <span className="report__hero-label">{t('TOTAL P&L')}</span>
             <span className={`report__hero-value ${tone}`}>{money(stats.total)}</span>
           </div>
           <dl className="report__breakdown">
             <div>
-              <dt>REALISED</dt>
+              <dt>{t('REALISED')}</dt>
               <dd>{money(stats.realised)}</dd>
             </div>
             <div>
-              <dt>UNREALISED</dt>
+              <dt>{t('UNREALISED')}</dt>
               <dd className={stats.unrealised < 0 ? 'num--down' : 'num--up'}>{money(stats.unrealised)}</dd>
             </div>
             <div>
-              <dt>COMMISSION</dt>
+              <dt>{t('COMMISSION')}</dt>
               <dd>{money(stats.commission)}</dd>
             </div>
             <div>
-              <dt>CASH LEFT</dt>
+              <dt>{t('CASH LEFT')}</dt>
               <dd>{money(stats.cash)}</dd>
             </div>
           </dl>
         </div>
 
+        <div className={stats.beatsBenchmark ? 'report__bench report__bench--win' : 'report__bench'}>
+          <div className="report__bench-side">
+            <span className="report__bench-label">
+              {t('BENCHMARK')} · {t('BUY & HOLD')}
+            </span>
+            <span className="report__bench-value">{money(stats.benchmarkPnl)}</span>
+            <span className="report__bench-note">
+              {t('BENCHMARK RETURN')} {stats.benchmarkReturnPct >= 0 ? '+' : ''}
+              {stats.benchmarkReturnPct.toFixed(2)}%
+            </span>
+          </div>
+          <div className="report__bench-side report__bench-side--right">
+            <span
+              className={
+                stats.beatsBenchmark
+                  ? 'report__bench-verdict report__bench-verdict--win'
+                  : 'report__bench-verdict'
+              }
+            >
+              {t(stats.beatsBenchmark ? 'YOU BEAT THE BENCHMARK' : 'BEHIND THE BENCHMARK')}
+            </span>
+            <span className="report__bench-note">
+              {t('ALPHA VS BENCHMARK')} <span className={stats.alpha >= 0 ? 'num--up' : 'num--down'}>{signedMoney(stats.alpha)}</span>
+            </span>
+            <span className="report__bench-note">
+              {t('YOUR RETURN')} {ourReturnPct >= 0 ? '+' : ''}
+              {ourReturnPct.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
         <div className="report__grid">
           <article className="report__card">
-            <h3 className="report__card-title">FLOW</h3>
+            <h3 className="report__card-title">{t('FLOW')}</h3>
             <dl className="report__rows">
               <div>
-                <dt>Fills</dt>
+                <dt>{t('Fills')}</dt>
                 <dd>
                   {stats.trades} ({stats.buys}B / {stats.sells}S)
                 </dd>
               </div>
               <div>
-                <dt>Hit ratio above mid</dt>
+                <dt>{t('Hit ratio above mid')}</dt>
                 <dd>{pct(stats.winRate)}</dd>
               </div>
               <div>
-                <dt>Avg edge / fill</dt>
+                <dt>{t('Avg edge / fill')}</dt>
                 <dd>{signed(stats.avgEdge)}</dd>
               </div>
               <div>
-                <dt>Best / worst edge</dt>
+                <dt>{t('Best / worst edge')}</dt>
                 <dd>
                   {signed(stats.bestEdge)} / {signed(stats.worstEdge)}
                 </dd>
               </div>
               <div>
-                <dt>Quotes sent</dt>
+                <dt>{t('Quotes sent')}</dt>
                 <dd>{stats.quotes}</dd>
               </div>
               <div>
-                <dt>Quote width vs market</dt>
+                <dt>{t('Quote width vs market')}</dt>
                 <dd>{stats.avgSpreadRatio === null ? '—' : `${stats.avgSpreadRatio.toFixed(2)}x`}</dd>
               </div>
             </dl>
           </article>
 
           <article className="report__card">
-            <h3 className="report__card-title">RISK &amp; RESPONSE</h3>
+            <h3 className="report__card-title">{t('RISK & RESPONSE')}</h3>
             <dl className="report__rows">
               <div>
-                <dt>Peak P&amp;L</dt>
+                <dt>{t('Peak P&L')}</dt>
                 <dd>{money(stats.peakPnl)}</dd>
               </div>
               <div>
-                <dt>Max drawdown</dt>
+                <dt>{t('Max drawdown')}</dt>
                 <dd className={stats.maxDrawdown > 0 ? 'num--down' : undefined}>{money(-stats.maxDrawdown)}</dd>
               </div>
               <div>
-                <dt>Avg gross exposure</dt>
+                <dt>{t('Avg gross exposure')}</dt>
                 <dd>{money(stats.avgGross)}</dd>
               </div>
               <div>
-                <dt>Net exposure at close</dt>
+                <dt>{t('Net exposure at close')}</dt>
                 <dd>{money(stats.netExposure)}</dd>
               </div>
               <div>
-                <dt>Median RFQ response</dt>
+                <dt>{t('Median RFQ response')}</dt>
                 <dd>
-                  {stats.medianResponseTicks === null ? '—' : `${stats.medianResponseTicks} ticks`}
+                  {stats.medianResponseTicks === null
+                    ? '—'
+                    : t('{ticks} ticks', { ticks: stats.medianResponseTicks })}
                 </dd>
               </div>
               <div>
-                <dt>Headlines traded into</dt>
+                <dt>{t('Headlines traded into')}</dt>
                 <dd>
                   {stats.headlinesAnswered}/{stats.headlines}
                 </dd>
@@ -162,15 +207,17 @@ export default function SettlementReport({
           <div className="report__score-head">
             <span className="drawer__composite-value">{score.composite}</span>
             <div>
-              <span className="report__score-label">COMPOSITE</span>
-              <span className="report__score-percentile">{score.percentile}th percentile</span>
+              <span className="report__score-label">{t('COMPOSITE')}</span>
+              <span className="report__score-percentile">
+                {t('{percentile}th percentile', { percentile: score.percentile })}
+              </span>
             </div>
           </div>
           <ul className="score-list score-list--compact">
             {score.dimensions.map((dimension) => (
               <li key={dimension.key} className="score-row">
                 <div className="score-row__top">
-                  <span className="score-row__label">{dimension.label}</span>
+                  <span className="score-row__label">{t(dimension.label)}</span>
                   <span className="score-row__value">{Math.round(dimension.value)}</span>
                 </div>
                 <div className="meter">
@@ -190,10 +237,10 @@ export default function SettlementReport({
 
         <div className="report__actions">
           <button type="button" className="btn btn--primary" onClick={onRestart}>
-            RUN ANOTHER SESSION
+            {t('RUN ANOTHER SESSION')}
           </button>
           <button type="button" className="btn btn--ghost" onClick={onClose}>
-            REVIEW THE DESK
+            {t('REVIEW THE DESK')}
           </button>
         </div>
       </section>

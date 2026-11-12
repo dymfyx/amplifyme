@@ -314,6 +314,8 @@ describe('status bar at the close', () => {
           speed: 1,
           latencyMs: 3,
           seed: 424242,
+          minutes: 30,
+          timeLeftMs: 0,
         }}
         onTogglePause={() => {
           toggled = true
@@ -327,5 +329,57 @@ describe('status bar at the close', () => {
     expect(screen.getByText('DAY 15/15')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument()
     expect(toggled).toBe(false)
+  })
+})
+describe('entry settings', () => {
+  it('switches the entry screen to Chinese and back to English', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Chinese' }))
+    expect(screen.getByRole('heading', { name: '市场模拟' })).toBeInTheDocument()
+    expect(screen.getByText('语言')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(screen.getByRole('heading', { name: 'Market Simulation' })).toBeInTheDocument()
+  })
+
+  it('carries the chosen session length into the desk and shows the countdown', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '5 minute session' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Market Maker' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Market Maker desk' }))
+    expect(screen.getByText('TIME LEFT')).toBeInTheDocument()
+    expect(screen.getByText('05:00')).toBeInTheDocument()
+    expect(screen.getByText('5 MIN')).toBeInTheDocument()
+  })
+
+  it('keeps the language when the desk is opened', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Chinese' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Sales' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Sales desk' }))
+    expect(screen.getByText('销售台面')).toBeInTheDocument()
+  })
+})
+
+describe('shared session links', () => {
+  it('pins the language and the session length from the url', () => {
+    window.location.hash = '#market-maker?seed=20261112&lang=zh&minutes=5'
+    render(<App />)
+    expect(screen.getByText('共享种子')).toBeInTheDocument()
+    expect(screen.getByText('种子 20261112')).toBeInTheDocument()
+    expect(screen.getByText('05:00')).toBeInTheDocument()
+    expect(screen.getByText('5 分钟')).toBeInTheDocument()
+  })
+})
+
+describe('session end', () => {
+  it('auto-settles when the 5-minute clock runs out', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    expect(screen.getByRole('heading', { name: 'Settlement report' })).toBeInTheDocument()
+    expect(screen.getByText(/BENCHMARK · BUY & HOLD/)).toBeInTheDocument()
+    expect(screen.getByText(/ALPHA VS BENCHMARK/)).toBeInTheDocument()
   })
 })
