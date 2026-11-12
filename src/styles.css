@@ -1373,7 +1373,7 @@ table.grid.grid--book tr.row--bid {
   display: inline-block;
   padding: 0 2px;
   border-radius: 2px;
-  animation: tick-fade 320ms ease-out;
+  animation: tick-fade 260ms ease-out;
 }
 
 .tick--up {
@@ -1386,7 +1386,7 @@ table.grid.grid--book tr.row--bid {
 
 @keyframes tick-up {
   0% {
-    background: rgba(46, 204, 143, 0.28);
+    background: rgba(46, 204, 143, 0.18);
   }
   100% {
     background: transparent;
@@ -1395,7 +1395,7 @@ table.grid.grid--book tr.row--bid {
 
 @keyframes tick-down {
   0% {
-    background: rgba(255, 92, 108, 0.28);
+    background: rgba(255, 92, 108, 0.18);
   }
   100% {
     background: transparent;
