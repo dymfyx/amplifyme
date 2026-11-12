@@ -58,6 +58,24 @@ client. Positions are marked to market and `P&L`, `NET EXPOSURE` and `COMMISSION
 Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
 stale price by accident.
 
+## Desktop shortcut
+
+Run `npm run shortcut` once and a **Market Simulation** shortcut appears on your desktop (dark-blue terminal icon).
+Double-clicking it:
+
+1. starts the local preview server in a hidden window (running `vite build` first if `dist/` is missing),
+2. waits until `http://127.0.0.1:4173` answers,
+3. opens the terminal in your default browser.
+
+Clicking it again while the server is up just opens the browser — no duplicate servers.
+
+| Script | Purpose |
+|---|---|
+| `launcher/start-sim.ps1` | Launcher behind the shortcut; `-NoBrowser` skips opening the browser, `-Port` overrides 4173 |
+| `launcher/stop-sim.ps1` | Stops whatever process is listening on the simulation port |
+| `launcher/install-shortcut.ps1` | (Re)creates the desktop shortcut, using `public/icon.ico` |
+| `public/icon.ico` | Shortcut icon, also served as the browser favicon |
+
 ## Deep links
 
 Append `#sales` or `#market-maker` to the URL to open a desk directly (handy for screenshots and for sharing a
@@ -95,6 +113,12 @@ src/
   test/
     setup.ts            jest-dom matchers
     app.test.tsx        component tests
+    launcher.test.ts    desktop launcher / icon assertions
+launcher/
+  start-sim.ps1         start preview + open browser (desktop shortcut target)
+  stop-sim.ps1          stop the preview server
+  install-shortcut.ps1  create the desktop shortcut
+public/icon.ico         shortcut icon + favicon
 docs/ui-proposal.md     layout proposal, decisions and roadmap
 ```
 
