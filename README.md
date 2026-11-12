@@ -269,3 +269,10 @@ Because every part of the app is client-side, anything that serves static files 
 S3 + CloudFront, an internal nginx box, `npx serve dist` — serve the contents of `dist/` at any subpath and the
 relative asset URLs take care of the rest.
 
+## Send it to the group
+
+The desk is a hash-routed static app (`#sales` / `#market-maker`), so any static host works.
+
+- **Hosted link:** https://dymfyx.github.io/amplifyme/ — every teammate opens it in a browser, picks a desk, sets an opening book and plays a 30-minute session. Each visit draws a fresh random seed, so scores are not comparable run to run but the scenario itself is the same.
+- **One file:** run `npm run build:single` and send `dist-single/index.html` (~330 KB). It opens from a double-click, offline, no server. Deep links `#sales` / `#market-maker` still work.
+- **Any static host:** drag the `dist/` folder onto https://app.netlify.com/drop for an instant throwaway URL.
