@@ -11,7 +11,8 @@ middle, news and scoring on the right.
 
 - **React 19 + TypeScript**, bundled with **Vite**
 - **Plain CSS custom properties** — no UI framework; dark terminal theme, monospace everywhere
-- **Vitest + Testing Library** (jsdom) for component tests
+- **Pure-function simulation engine** (`src/engine/`) — seeded, deterministic, no side effects outside `step()`
+- **Vitest + Testing Library** (jsdom) — engine tests plus a thin UI integration layer
 - Runtime dependencies: `react`, `react-dom` only
 
 ## Scripts
@@ -39,6 +40,24 @@ The terminal switches its central ticket by role:
 The scorecard is hidden while you trade. Press `SCORE` in the top bar (or the teaser under the event feed) to
 reveal it in a drawer; `ESC` or a click on the backdrop closes it.
 
+## Simulation clock
+
+The session compresses 15 trading days (09:30-16:00 each) into 30 minutes of real time.
+
+| Control | Behaviour |
+|---|---|
+| `PAUSE` / `RESUME` | Freezes the clock, prices, quote countdowns and fills |
+| `SPEED 1x / 2x / 4x` | Multiplies how many engine ticks run per 250 ms frame |
+| `SPACE` | Pause / resume |
+| `1` `2` `4` | Pick a speed |
+
+Every engine tick moves the clock ~48.75 simulated seconds, random-walks each name, rebuilds its five-level book,
+reveals due headlines (with a price shock), counts quote validity down, and can fill a resting quote against the
+client. Positions are marked to market and `P&L`, `NET EXPOSURE` and `COMMISSION` recompute on every tick.
+
+Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
+stale price by accident.
+
 ## Deep links
 
 Append `#sales` or `#market-maker` to the URL to open a desk directly (handy for screenshots and for sharing a
@@ -50,7 +69,13 @@ broken layout): `http://localhost:5173/#market-maker`.
 src/
   App.tsx               role state: entry screen -> terminal
   types.ts              shared domain types
-  data/mock.ts          mock instruments, book, news, RFQs, quotes, scorecard
+  engine/
+    rng.ts              seeded PRNG helpers (state-in / state-out)
+    scenario.ts         universe, headline templates, client roster
+    simulation.ts       session state machine: clock, walk, book, quotes, fills, P&L
+  hooks/
+    useSimulation.ts    drives the engine on a 250 ms interval, exposes actions
+  data/mock.ts          seed positions/orders/trades, news copy, scorecard copy
   screens/
     RoleSelect.tsx      desk selection screen
     Terminal.tsx        trading shell composition
@@ -75,14 +100,15 @@ docs/ui-proposal.md     layout proposal, decisions and roadmap
 
 ## Status
 
-**P0 skeleton complete** — full layout, two desks, mock data, local interactions. No simulation engine yet.
+**P1 complete** — live clock, tick-driven prices, event shocks, quote/order fills and mark-to-market P&L all run
+off the simulation engine. Scoring is still a placeholder card.
 
 | Phase | Scope |
 |---|---|
 | P0 (done) | Static shell, role selection, all panels on mock data |
-| P1 | Engine wiring: clock control, tick stream, quotes/orders, fills, P&L |
-| P2 | Event stream, live scoring, settlement report |
-| P3 | Polish: hotkeys, sounds, resizable panels |
+| P1 (done) | Clock control, tick stream, quotes/orders, fills, mark-to-market P&L |
+| P2 | Live scoring off decision telemetry, settlement report, replay |
+| P3 | Polish: sounds, resizable panels, session save/restore |
 
 ## Working rules
 

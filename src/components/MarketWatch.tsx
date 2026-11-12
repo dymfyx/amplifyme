@@ -9,6 +9,11 @@ interface MarketWatchProps {
 
 const fmt = (value: number) => value.toFixed(2)
 
+const moveClass = (move: number | undefined) => {
+  if (!move) return ''
+  return move > 0 ? 'tick tick--up' : 'tick tick--down'
+}
+
 export default function MarketWatch({ instruments, selected, onSelect }: MarketWatchProps) {
   return (
     <section className="panel panel--market">
@@ -44,7 +49,11 @@ export default function MarketWatch({ instruments, selected, onSelect }: MarketW
                     </button>
                     <span className="ticker__name">{instrument.name}</span>
                   </td>
-                  <td className="num">{fmt(instrument.last)}</td>
+                  <td className="num">
+                    <span key={instrument.last} className={moveClass(instrument.lastMove)}>
+                      {fmt(instrument.last)}
+                    </span>
+                  </td>
                   <td className={isDown ? 'num num--down' : 'num num--up'}>
                     {isDown ? '▼' : '▲'} {Math.abs(instrument.changePct).toFixed(2)}%
                   </td>

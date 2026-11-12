@@ -1,13 +1,22 @@
-import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 
-const openDesk = async (desk: 'Sales' | 'Market Maker') => {
-  const user = userEvent.setup()
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  window.location.hash = ''
+})
+
+const openDesk = (desk: 'Sales' | 'Market Maker') => {
   render(<App />)
-  await user.click(screen.getByRole('button', { name: `Start as ${desk}` }))
-  return user
+  fireEvent.click(screen.getByRole('button', { name: `Start as ${desk}` }))
 }
+
+const clockText = () => screen.getByText(/^SIM /).textContent
 
 describe('role selection', () => {
   it('offers two separate desks on the entry screen', () => {
@@ -18,105 +27,136 @@ describe('role selection', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
-  it('opens the market making terminal with a two-way quote ticket', async () => {
-    await openDesk('Market Maker')
+  it('opens the market making terminal with a two-way quote ticket', () => {
+    openDesk('Market Maker')
     expect(screen.getByText('MARKET MAKING DESK')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'QUOTE TICKET' })).toBeInTheDocument()
     expect(screen.getByLabelText('Bid price')).toBeInTheDocument()
     expect(screen.getByLabelText('Offer price')).toBeInTheDocument()
   })
 
-  it('opens the sales terminal with a client order ticket', async () => {
-    await openDesk('Sales')
+  it('opens the sales terminal with a client order ticket', () => {
+    openDesk('Sales')
     expect(screen.getByText('SALES DESK')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'CLIENT ORDER' })).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity')).toHaveValue('2000')
     expect(screen.queryByLabelText('Bid price')).not.toBeInTheDocument()
   })
 
-  it('returns to the entry screen when the desk is exited', async () => {
-    const user = await openDesk('Sales')
-    await user.click(screen.getByRole('button', { name: 'EXIT DESK' }))
+  it('returns to the entry screen when the desk is exited', () => {
+    openDesk('Sales')
+    fireEvent.click(screen.getByRole('button', { name: 'EXIT DESK' }))
     expect(screen.getByRole('button', { name: 'Start as Market Maker' })).toBeInTheDocument()
   })
 })
 
 describe('terminal shell', () => {
-  afterEach(() => {
-    window.location.hash = ''
-  })
-
   it('can open a desk straight from the url hash', () => {
     window.location.hash = '#market-maker'
     render(<App />)
     expect(screen.getByText('MARKET MAKING DESK')).toBeInTheDocument()
   })
 
-  it('shows the pnl strip and the simulated clock', async () => {
-    await openDesk('Sales')
+  it('shows the pnl strip and the simulated clock', () => {
+    openDesk('Sales')
     expect(screen.getByText('REALISED P&L')).toBeInTheDocument()
     expect(screen.getByText('TOTAL P&L')).toBeInTheDocument()
-    expect(screen.getByText('SIM 10:34:56')).toBeInTheDocument()
-    expect(screen.getByText('DAY 3/15')).toBeInTheDocument()
+    expect(clockText()).toBe('SIM 09:30:00')
+    expect(screen.getByText('DAY 1/15')).toBeInTheDocument()
   })
 
-  it('switches the loaded instrument when a market row is picked', async () => {
-    const user = await openDesk('Sales')
+  it('advances the clock and the prices on every tick', () => {
+    openDesk('Market Maker')
+    const beforeClock = clockText()
+    const beforeRow = screen.getByTestId('market-row-AZN').textContent
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    expect(clockText()).not.toBe(beforeClock)
+    expect(screen.getByTestId('market-row-AZN').textContent).not.toBe(beforeRow)
+  })
+
+  it('pauses and resumes the clock from the status bar', () => {
+    openDesk('Market Maker')
+    fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }))
+    expect(screen.getByRole('button', { name: 'RESUME' })).toBeInTheDocument()
+
+    const pausedClock = clockText()
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(clockText()).toBe(pausedClock)
+
+    fireEvent.click(screen.getByRole('button', { name: 'RESUME' }))
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(clockText()).not.toBe(pausedClock)
+  })
+
+  it('switches the loaded instrument when a market row is picked', () => {
+    openDesk('Sales')
     expect(screen.getByDisplayValue('AZN')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Select NFLX' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Select NFLX' }))
     expect(screen.getByDisplayValue('NFLX')).toBeInTheDocument()
   })
 
-  it('loads the dispatched rfq into the ticket', async () => {
-    const user = await openDesk('Market Maker')
-    await user.click(screen.getByRole('button', { name: /RFQ-222/ }))
-    expect(screen.getByText('AM-21 · BUY 500 TSLA')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('TSLA')).toBeInTheDocument()
+  it('loads the dispatched rfq into the ticket', () => {
+    openDesk('Market Maker')
+    expect(screen.getByText('AM-18 · SELL 2000 AZN')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /RFQ-201/ }))
+    expect(screen.getByDisplayValue('AZN')).toBeInTheDocument()
   })
 
-  it('keeps the scorecard hidden until it is requested', async () => {
-    const user = await openDesk('Market Maker')
+  it('keeps the scorecard hidden until it is requested', () => {
+    openDesk('Market Maker')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'SCORE' }))
-    const dialog = screen.getByRole('dialog')
-    expect(dialog).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByText('COMPOSITE')).toBeInTheDocument()
     expect(screen.getByText('Discipline')).toBeInTheDocument()
   })
 
-  it('closes the scorecard on escape', async () => {
-    const user = await openDesk('Sales')
-    await user.click(screen.getByRole('button', { name: 'SCORE' }))
+  it('closes the scorecard on escape', () => {
+    openDesk('Sales')
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    await user.keyboard('{Escape}')
+    fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
 
 describe('tickets', () => {
-  it('confirms a two-way quote for a market maker', async () => {
-    const user = await openDesk('Market Maker')
-    await user.click(screen.getByRole('button', { name: 'SEND QUOTE' }))
+  it('confirms a two-way quote for a market maker', () => {
+    openDesk('Market Maker')
+    fireEvent.click(screen.getByRole('button', { name: 'SEND QUOTE' }))
     const status = screen.getByRole('status')
     expect(status).toHaveTextContent('QUOTE SENT')
     expect(status).toHaveTextContent('AZN')
   })
 
-  it('confirms a client order for a sales trader', async () => {
-    const user = await openDesk('Sales')
-    const quantity = screen.getByLabelText('Quantity')
-    await user.clear(quantity)
-    await user.type(quantity, '1500')
-    await user.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
-    const status = screen.getByRole('status')
-    expect(status).toHaveTextContent('ORDER ROUTED · SELL 1,500 AZN')
+  it('shows the sent quote in the live quotes blotter', () => {
+    openDesk('Market Maker')
+    fireEvent.click(screen.getByRole('button', { name: 'SEND QUOTE' }))
+    expect(screen.getByText(/^Q-\d+$/)).toBeInTheDocument()
   })
 
-  it('switches the book between positions, orders and trades', async () => {
-    const user = await openDesk('Sales')
-    await user.click(screen.getByRole('button', { name: /ORDERS/ }))
+  it('fills a client order for a sales trader and updates the position', () => {
+    openDesk('Sales')
+    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1500' } })
+    fireEvent.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('FILLED · BUY 1,500 AZN')
+    expect(screen.getAllByText('1,500').length).toBeGreaterThan(0)
+  })
+
+  it('switches the book between positions, orders and trades', () => {
+    openDesk('Sales')
+    fireEvent.click(screen.getByRole('button', { name: /ORDERS/ }))
     expect(screen.getByText('ORD-1042')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /TRADES/ }))
+    fireEvent.click(screen.getByRole('button', { name: /TRADES/ }))
     expect(screen.getByText('TRD-8841')).toBeInTheDocument()
   })
 })

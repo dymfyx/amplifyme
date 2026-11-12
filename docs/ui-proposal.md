@@ -324,3 +324,40 @@ P0 已交付：
 - **主界面** `src/screens/Terminal.tsx`：顶栏 P&L 条 + 三栏 8 面板 + 底部状态栏 + 评分抽屉。
 - **组件**：`TopBar`、`MarketWatch`、`BookPanel`、`DispatchPanel`、`TradeTicket`（双角色同一组件）、`ChartPanel`、`PositionsPanel`、`EventFeed`、`ScoreDrawer`、`StatusBar`、`PanelHeader`。
 - **测试** `src/test/app.test.tsx`：角色入口、票据切换、派单装填、评分抽屉显隐、下单/报价确认、BOOK Tab 切换。
+
+---
+
+## 13. P1 落地记录（模拟时钟 + tick 行情）
+
+用户要求（m00351）：把 mock 数据换成**可推进的模拟时钟 + tick 行情流**，价格像真实盘口一样跳动，持仓与 P&L 实时更新。
+
+### 13.1 时间压缩参数
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| `TICK_MS` | 250 | 真实时间每 250ms 推进一帧 |
+| `SESSION_DAYS` | 15 | 3 周 × 5 交易日 |
+| `DAY_SECONDS` | 23,400 | 每个模拟交易日 09:30→16:00 |
+| `SESSION_SECONDS` | 351,000 | 15 天总模拟秒数 |
+| `SIM_SECONDS_PER_TICK` | 48.75 | 351,000 ÷ (30 分钟 ÷ 250ms) → **30 分钟跑完 3 周** |
+| `SPEEDS` | 1x / 2x / 4x | 每帧步进 1 / 2 / 4 个 tick |
+
+### 13.2 引擎（纯函数）
+
+- `src/engine/rng.ts`：mulberry32 种子随机，随机游标存在 state 里，`step()` 无外部副作用。
+- `src/engine/scenario.ts`：5 个标的（sigma / spread / lot）、12 条新闻模板（带 `offset`、`shock`）、6 个客户席位、派单话术。
+- `src/engine/simulation.ts`：`createSession(seed)` / `stepSession(state)` / `advanceSession` / `sendQuote` / `fillClientOrder` / `declineDispatch` / `togglePause` / `cycleSpeed`，以及 `selectInstruments` / `selectPnl` / `selectBook` / `selectSeries` / `selectSessionMeta` 等选择器。
+- 每 tick 顺序：到点新闻入库并施加价格冲击（冲击按 `sigma/0.0018` 做 beta 放大）→ 每标的价格随机游走（1.2% 概率 6σ 跳价）→ 重建五档盘口（半价差按 bps）→ 报价倒计时与成交（客户 SELL 打 bid / BUY 抬 offer，82% 概率成交，扣 0.5% 佣金）→ 派单过期与补发（TTL 9000 模拟秒）→ 15 个交易日后 `CLOSED`。
+- `src/hooks/useSimulation.ts`：250ms `setInterval` 驱动，所有写操作经同一 `latest` ref，避免 React 闭包读到旧 state。
+
+### 13.3 界面变化
+
+- `StatusBar` 增加 `PAUSE/RESUME`、`SPEED 1x/2x/4x`，状态圆点随 RUNNING/PAUSED/CLOSED 变色；快捷键 `SPACE` 暂停、`1/2/4` 调速度。
+- `MarketWatch` 每 tick 用 `lastMove` 闪烁涨跌底色；`ChartPanel` 周期按钮真实切片最近 N 个 tick（1M/5M/15M/30M/1H/ALL），成交量柱按 `maxVolume` 归一，事件竖线随头条推进出现。
+- `EventFeed` 新头条自动滚到底部；`PositionsPanel` 显示实时 `UNREALISED P&L`。
+- `TradeTicket`：报价/限价在未手工编辑前**跟随实时盘口**，避免挂出被行情甩开的价；报价列表分 `LIVE` / `OLD` 两个 Tab，状态随 tick 变 `FILLED` / `EXPIRED`。
+
+### 13.4 测试
+
+- `src/engine/simulation.test.ts`（20 例）：时钟与日期滚动、收盘、暂停/倍速、盘口不交叉、滚动窗口、同种子确定性、新闻揭示与冲击、派单到达、持仓 mark-to-market、PnL 公式、平仓实现盈利、反手均价、成交扣佣、非法单与交叉报价拒单。
+- `src/test/app.test.tsx`（16 例）：统一用 **fake timers + `fireEvent`**（`userEvent` 在 fake timers 下的内部 `setTimeout` 会挂住，见下），覆盖入口、hash 深链、时钟推进、暂停恢复、品种切换、派单装填、评分抽屉、报价/下单/切 Tab。

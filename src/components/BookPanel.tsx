@@ -1,26 +1,23 @@
-import type { Instrument } from '../types'
-import { bookFor } from '../data/mock'
+import type { CSSProperties } from 'react'
+import type { Book } from '../types'
 import PanelHeader from './PanelHeader'
 
 interface BookPanelProps {
-  instrument: Instrument
+  symbol: string
+  book: Book
 }
 
-export default function BookPanel({ instrument }: BookPanelProps) {
-  const book = bookFor(instrument)
+export default function BookPanel({ symbol, book }: BookPanelProps) {
   const bestBid = book.bids[0]
   const bestAsk = book.asks[0]
   const spread = (bestAsk.price - bestBid.price).toFixed(2)
   const maxSize = Math.max(...book.bids.map((level) => level.size), ...book.asks.map((level) => level.size))
-  const depthWidth = (size: number) => `${Math.max(8, Math.round((size / maxSize) * 100))}%`
+  const depthStyle = (size: number): CSSProperties =>
+    ({ '--depth': `${Math.max(6, Math.round((size / maxSize) * 100))}%` }) as unknown as CSSProperties
 
   return (
     <section className="panel panel--book">
-      <PanelHeader
-        index="2"
-        title="ORDER BOOK"
-        right={<span className="panel__meta">{instrument.symbol}</span>}
-      />
+      <PanelHeader index="2" title="ORDER BOOK" right={<span className="panel__meta">{symbol}</span>} />
       <table className="grid grid--book">
         <thead>
           <tr>
@@ -28,37 +25,28 @@ export default function BookPanel({ instrument }: BookPanelProps) {
             <th scope="col" className="num">BID</th>
             <th scope="col" className="num">ASK</th>
             <th scope="col" className="num">ASK SIZE</th>
-            <th scope="col" className="cell-depth-head">
-              DEPTH
-            </th>
           </tr>
         </thead>
         <tbody>
           {[...book.asks].reverse().map((level) => (
-            <tr key={`ask-${level.price}`} className="row row--ask">
+            <tr key={`ask-${level.price}`} className="row row--ask" style={depthStyle(level.size)}>
               <td className="num muted">—</td>
               <td className="num muted">—</td>
               <td className="num num--down">{level.price.toFixed(2)}</td>
               <td className="num">{level.size.toLocaleString('en-US')}</td>
-              <td className="cell-depth">
-                <span className="depth-bar depth-bar--ask" style={{ width: depthWidth(level.size) }} />
-              </td>
             </tr>
           ))}
           <tr className="row row--spread">
-            <td colSpan={5} className="spread">
-              SPREAD {spread} · {instrument.symbol}
+            <td colSpan={4} className="spread">
+              SPREAD {spread} · {symbol}
             </td>
           </tr>
           {book.bids.map((level) => (
-            <tr key={`bid-${level.price}`} className="row row--bid">
+            <tr key={`bid-${level.price}`} className="row row--bid" style={depthStyle(level.size)}>
               <td className="num">{level.size.toLocaleString('en-US')}</td>
               <td className="num num--up">{level.price.toFixed(2)}</td>
               <td className="num muted">—</td>
               <td className="num muted">—</td>
-              <td className="cell-depth">
-                <span className="depth-bar depth-bar--bid" style={{ width: depthWidth(level.size) }} />
-              </td>
             </tr>
           ))}
         </tbody>

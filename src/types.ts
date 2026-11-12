@@ -8,6 +8,8 @@ export interface Instrument {
   last: number
   changePct: number
   changeAbs: number
+  /** 最近一个 tick 的价格变化，UI 用来做跳动闪烁 */
+  lastMove?: number
 }
 
 export interface Position {

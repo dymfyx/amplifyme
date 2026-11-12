@@ -536,31 +536,13 @@ table.grid td.num {
   background: rgba(76, 141, 255, 0.16);
 }
 
-.cell-depth {
-  width: 20%;
-  padding: 4px 8px !important;
+/* 盘口深度：整行背景条，ask 从右向左、bid 从左向右，长度按该档相对最大挂单量 */
+table.grid.grid--book tr.row--ask {
+  background-image: linear-gradient(to left, rgba(255, 92, 108, 0.13) var(--depth, 0%), transparent 0);
 }
 
-.cell-depth-head {
-  width: 20%;
-  text-align: right !important;
-}
-
-.depth-bar {
-  display: block;
-  height: 6px;
-  border-radius: 1px;
-  opacity: 0.55;
-}
-
-.depth-bar--ask {
-  background: linear-gradient(90deg, transparent, rgba(255, 92, 108, 0.85));
-  margin-left: auto;
-}
-
-.depth-bar--bid {
-  background: linear-gradient(90deg, rgba(46, 204, 143, 0.85), transparent);
-  margin-right: auto;
+table.grid.grid--book tr.row--bid {
+  background-image: linear-gradient(to right, rgba(46, 204, 143, 0.11) var(--depth, 0%), transparent 0);
 }
 
 .row--spread td {
@@ -1342,12 +1324,96 @@ table.grid td.num {
   box-shadow: 0 0 6px rgba(46, 204, 143, 0.8);
 }
 
+.statusbar__dot--warn {
+  background: var(--warn);
+  box-shadow: 0 0 6px rgba(245, 166, 35, 0.8);
+}
+
+.statusbar__dot--down {
+  background: var(--down);
+  box-shadow: 0 0 6px rgba(255, 92, 108, 0.8);
+}
+
 .statusbar__status {
+  color: var(--up);
+}
+
+.statusbar__status:has(+ .statusbar__clock) {
+  letter-spacing: 0.12em;
+}
+
+.statusbar__btn {
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.statusbar__btn:hover {
+  border-color: var(--line);
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+
+.statusbar__btn--strong {
   color: var(--up);
 }
 
 .statusbar__clock {
   color: var(--text-1);
+}
+
+/* 行情跳动：每次价格变化重播一次闪烁 */
+.tick {
+  display: inline-block;
+  padding: 0 2px;
+  border-radius: 2px;
+  animation: tick-fade 320ms ease-out;
+}
+
+.tick--up {
+  animation-name: tick-up;
+}
+
+.tick--down {
+  animation-name: tick-down;
+}
+
+@keyframes tick-up {
+  0% {
+    background: rgba(46, 204, 143, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes tick-down {
+  0% {
+    background: rgba(255, 92, 108, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes tick-fade {
+  0% {
+    background: transparent;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.stat__value--live {
+  color: var(--accent);
+  letter-spacing: 0.04em;
 }
 
 @media (max-width: 1360px) {
@@ -1388,10 +1454,4 @@ table.grid td.num {
   }
 }
 
-@media (max-width: 1360px) {
-  table.grid--book th:nth-child(5),
-  table.grid--book td:nth-child(5),
-  .cell-depth-head {
-    display: none;
-  }
-}
+

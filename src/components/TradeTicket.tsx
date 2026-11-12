@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import type { Instrument, QuoteRow, Rfq, Role, Side } from '../types'
-import { bookFor } from '../data/mock'
+import { useEffect, useState } from 'react'
+import type { Book, Instrument, QuoteRow, Rfq, Role, Side } from '../types'
+import type { FillInput, QuoteInput } from '../engine/simulation'
 import PanelHeader from './PanelHeader'
 
 const COMMISSION_RATE = 0.005
@@ -11,22 +11,43 @@ const money = (value: number) =>
 interface TradeTicketProps {
   role: Role
   instrument: Instrument
+  book: Book
   rfq: Rfq | undefined
   quotes: QuoteRow[]
+  onQuote: (input: QuoteInput) => string
+  onFill: (input: FillInput) => string
+  onDecline: () => string
 }
 
-export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTicketProps) {
-  const book = bookFor(instrument)
+export default function TradeTicket({
+  role,
+  instrument,
+  book,
+  rfq,
+  quotes,
+  onQuote,
+  onFill,
+  onDecline,
+}: TradeTicketProps) {
   const [validFor, setValidFor] = useState('45')
-  const [bidPrice, setBidPrice] = useState(book.bids[0].price.toFixed(2))
-  const [offerPrice, setOfferPrice] = useState(book.asks[0].price.toFixed(2))
+  const [bidPrice, setBidPrice] = useState(() => book.bids[0].price.toFixed(2))
+  const [offerPrice, setOfferPrice] = useState(() => book.asks[0].price.toFixed(2))
   const [bidVolume, setBidVolume] = useState('10000')
   const [offerVolume, setOfferVolume] = useState('10000')
   const [side, setSide] = useState<Side>(rfq?.side ?? 'SELL')
   const [qty, setQty] = useState(String(rfq?.qty ?? 1000))
-  const [limitPrice, setLimitPrice] = useState(instrument.last.toFixed(2))
+  const [limitPrice, setLimitPrice] = useState(() => instrument.last.toFixed(2))
   const [tab, setTab] = useState<'live' | 'old'>('live')
   const [flash, setFlash] = useState<string | null>(null)
+  const [touched, setTouched] = useState(false)
+
+  /* 未手工改价前，报价/限价跟随实时盘口，避免挂出已被行情甩开的价 */
+  useEffect(() => {
+    if (touched) return
+    setBidPrice(book.bids[0].price.toFixed(2))
+    setOfferPrice(book.asks[0].price.toFixed(2))
+    setLimitPrice(instrument.last.toFixed(2))
+  }, [book, instrument.last, touched])
 
   const isMaker = role === 'market-maker'
   const notional = isMaker
@@ -36,21 +57,30 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
 
   const onSend = () => {
     if (isMaker) {
-      setFlash(
-        `QUOTE SENT · ${instrument.symbol} ${Number(bidPrice).toFixed(2)} / ${Number(
-          offerPrice,
-        ).toFixed(2)} · ${Number(bidVolume).toLocaleString('en-US')}×${Number(
-          offerVolume,
-        ).toLocaleString('en-US')} · VALID ${validFor}s`,
-      )
+      const message = onQuote({
+        symbol: instrument.symbol,
+        bid: Number(bidPrice),
+        offer: Number(offerPrice),
+        bidVolume: Number(bidVolume),
+        offerVolume: Number(offerVolume),
+        validFor: Number(validFor),
+        rfqId: rfq?.id,
+      })
+      setFlash(message)
       return
     }
-    setFlash(
-      `ORDER ROUTED · ${side} ${Number(qty).toLocaleString('en-US')} ${
-        instrument.symbol
-      } @ ${Number(limitPrice).toFixed(2)} · CLIENT ${rfq?.client ?? 'AM-39'} · VALID ${validFor}s`,
-    )
+    const message = onFill({
+      symbol: instrument.symbol,
+      clientSide: side,
+      client: rfq?.client ?? 'AM-39',
+      qty: Number(qty),
+      price: Number(limitPrice),
+      rfqId: rfq?.id,
+    })
+    setFlash(message)
   }
+
+  const onDeclineClick = () => setFlash(onDecline())
 
   const rows = quotes.filter((quote) => (tab === 'live' ? quote.status === 'LIVE' : quote.status !== 'LIVE'))
 
@@ -90,7 +120,7 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
                   className="field__input"
                   inputMode="decimal"
                   value={bidPrice}
-                  onChange={(event) => setBidPrice(event.target.value)}
+                  onChange={(event) => { setTouched(true); setBidPrice(event.target.value) }}
                 />
               </label>
               <label className="field">
@@ -99,7 +129,7 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
                   className="field__input"
                   inputMode="decimal"
                   value={offerPrice}
-                  onChange={(event) => setOfferPrice(event.target.value)}
+                  onChange={(event) => { setTouched(true); setOfferPrice(event.target.value) }}
                 />
               </label>
               <label className="field">
@@ -158,7 +188,7 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
                   className="field__input"
                   inputMode="decimal"
                   value={limitPrice}
-                  onChange={(event) => setLimitPrice(event.target.value)}
+                  onChange={(event) => { setTouched(true); setLimitPrice(event.target.value) }}
                 />
               </label>
               <label className="field">
@@ -176,6 +206,12 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
 
         <div className="ticket__summary">
           <div className="stat">
+            <span className="stat__label">LIVE MKT</span>
+            <span className="stat__value stat__value--live">
+              {book.bids[0].price.toFixed(2)} / {book.asks[0].price.toFixed(2)}
+            </span>
+          </div>
+          <div className="stat">
             <span className="stat__label">NOTIONAL</span>
             <span className="stat__value">${money(notional)}</span>
           </div>
@@ -188,7 +224,7 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
               {isMaker ? 'SEND QUOTE' : 'FILL CLIENT ORDER'}
             </button>
             {!isMaker && (
-              <button type="button" className="btn btn--danger" onClick={() => setFlash('ORDER DECLINED')}>
+              <button type="button" className="btn btn--danger" onClick={onDeclineClick}>
                 DECLINE
               </button>
             )}
@@ -253,7 +289,7 @@ export default function TradeTicket({ role, instrument, rfq, quotes }: TradeTick
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="empty">
-                  No quotes in this tab
+                  {tab === 'live' ? 'No live quotes — send one from the ticket above' : 'No filled or expired quotes yet'}
                 </td>
               </tr>
             ) : null}

@@ -1,32 +1,49 @@
-interface SessionMeta {
-  clock: string
-  dayIndex: number
-  totalDays: number
-  status: string
-  speed: string
-}
+import type { SessionMeta } from '../engine/simulation'
 
 interface StatusBarProps {
   meta: SessionMeta
+  onTogglePause: () => void
+  onCycleSpeed: () => void
 }
 
-export default function StatusBar({ meta }: StatusBarProps) {
+const dotTone: Record<SessionMeta['status'], string> = {
+  RUNNING: 'live',
+  PAUSED: 'warn',
+  CLOSED: 'down',
+}
+
+export default function StatusBar({ meta, onTogglePause, onCycleSpeed }: StatusBarProps) {
   return (
     <footer className="statusbar">
       <div className="statusbar__group">
-        <span className="statusbar__dot" aria-hidden="true" />
+        <span className={`statusbar__dot statusbar__dot--${dotTone[meta.status]}`} aria-hidden="true" />
         <span className="statusbar__status">{meta.status}</span>
+        <button
+          type="button"
+          className="statusbar__btn statusbar__btn--strong"
+          onClick={onTogglePause}
+          title="Pause or resume the simulated clock"
+        >
+          {meta.status === 'RUNNING' ? 'PAUSE' : meta.status === 'PAUSED' ? 'RESUME' : 'CLOSED'}
+        </button>
         <span className="statusbar__clock">SIM {meta.clock}</span>
       </div>
       <div className="statusbar__group">
         <span>
           DAY {meta.dayIndex}/{meta.totalDays}
         </span>
-        <span>SPEED {meta.speed}</span>
-        <span>LATENCY 12ms</span>
+        <button
+          type="button"
+          className="statusbar__btn"
+          onClick={onCycleSpeed}
+          title="Cycle simulation speed (1x / 2x / 4x)"
+        >
+          SPEED {meta.speed}x
+        </button>
+        <span>LATENCY {meta.latencyMs}ms</span>
       </div>
       <div className="statusbar__group statusbar__group--end">
-        <span>ENTER send · ESC close</span>
+        <span>SPACE pause · 1/2/4 speed · ESC close</span>
       </div>
     </footer>
   )
