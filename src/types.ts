@@ -51,6 +51,8 @@ export interface NewsItem {
   kind: NewsKind
   impact: 1 | 2 | 3
   headline: string
+  /** 利好 +1 / 利空 -1；中性提示为空 */
+  direction?: 1 | -1
 }
 
 export interface Rfq {

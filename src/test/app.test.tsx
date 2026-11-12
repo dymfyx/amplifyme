@@ -165,6 +165,43 @@ describe('terminal shell', () => {
     expect(screen.getByDisplayValue('NFLX')).toBeInTheDocument()
   })
 
+  it('puts a named driver next to every price that moves', () => {
+    openDesk('Market Maker')
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    const drivers = screen.getAllByTestId(/^driver-/)
+    expect(drivers.length).toBeGreaterThan(0)
+    for (const driver of drivers) {
+      expect(driver.textContent?.trim().length ?? 0).toBeGreaterThan(2)
+      expect(driver.getAttribute('title')).toMatch(/bps/)
+    }
+  })
+
+  it('explains the tape in the price tape panel and jumps to a name from it', () => {
+    openDesk('Sales')
+    fireEvent.keyDown(window, { key: '4' })
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(screen.getByRole('heading', { name: 'PRICE TAPE' })).toBeInTheDocument()
+    const tapeRow = screen.getAllByRole('button', { name: /Open .* from the price tape/ })[0]
+    const symbol = /Open (\w+) from the price tape/.exec(tapeRow.getAttribute('aria-label') ?? '')?.[1]
+    expect(symbol).toBeTruthy()
+    fireEvent.click(tapeRow)
+    expect(screen.getByDisplayValue(symbol as string)).toBeInTheDocument()
+  })
+
+  it('marks each headline as bullish or bearish in the event feed', () => {
+    openDesk('Market Maker')
+    fireEvent.keyDown(window, { key: '4' })
+    act(() => {
+      vi.advanceTimersByTime(7000)
+    })
+    const bias = screen.getAllByText(/BULLISH|BEARISH/)
+    expect(bias.length).toBeGreaterThan(0)
+  })
+
   it('loads the dispatched rfq into the ticket', () => {
     openDesk('Market Maker')
     expect(screen.getByText('AM-18 · CLIENT SELL 2000 AZN')).toBeInTheDocument()

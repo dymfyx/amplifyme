@@ -17,7 +17,7 @@ export default function EventFeed({ news }: EventFeedProps) {
   return (
     <section className="panel panel--events">
       <PanelHeader
-        index="7"
+        index="8"
         title="EVENT FEED"
         right={<span className="badge badge--live">{news.length} {news.length === 1 ? 'ITEM' : 'ITEMS'}</span>}
       />
@@ -27,6 +27,11 @@ export default function EventFeed({ news }: EventFeedProps) {
             <div className="feed__meta">
               <span className="feed__time">{item.time}</span>
               <span className={`feed__tag feed__tag--${item.kind}`}>{item.tag}</span>
+              {item.direction ? (
+                <span className={`feed__bias feed__bias--${item.direction > 0 ? 'up' : 'down'}`}>
+                  {item.direction > 0 ? '▲ BULLISH' : '▼ BEARISH'}
+                </span>
+              ) : null}
               <span className="feed__impact" aria-label={`Impact ${item.impact} of 3`}>
                 {'●'.repeat(item.impact)}
                 <span className="feed__impact-off">{'●'.repeat(3 - item.impact)}</span>

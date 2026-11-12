@@ -477,6 +477,167 @@ table.grid.grid--positions td {
   min-height: 0;
 }
 
+/* PRICE TAPE：每次行情刷新都留一行解释，行高紧凑，最多显示 6 行 */
+.panel--tape {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.tape {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 184px;
+  overflow-y: auto;
+}
+
+.tape__row {
+  border-bottom: 1px solid var(--line-soft);
+  border-left: 2px solid transparent;
+}
+
+.tape__row--up {
+  border-left-color: rgba(46, 204, 143, 0.55);
+}
+
+.tape__row--down {
+  border-left-color: rgba(255, 92, 108, 0.55);
+}
+
+.tape__row--selected {
+  background: rgba(76, 141, 255, 0.08);
+}
+
+.tape__hit {
+  display: grid;
+  grid-template-columns: 44px 44px 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tape__hit:hover {
+  background: rgba(76, 141, 255, 0.07);
+}
+
+.tape__time {
+  color: var(--text-2);
+  font-size: 9.5px;
+}
+
+.tape__symbol {
+  color: var(--text-1);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.tape__pct {
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.tape__pct--up {
+  color: var(--up);
+}
+
+.tape__pct--down {
+  color: var(--down);
+}
+
+.tape__why {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.tape__chip {
+  max-width: 104px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 8.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tape__chip--up {
+  color: var(--up);
+  background: rgba(46, 204, 143, 0.1);
+}
+
+.tape__chip--down {
+  color: var(--down);
+  background: rgba(255, 92, 108, 0.1);
+}
+
+.tape__chip--headline {
+  border-color: currentColor;
+}
+
+.tape__empty {
+  padding: 10px 8px;
+  font-size: 10.5px;
+}
+
+/* MARKET WATCH 的 DRIVER 列：箭头 + 短标签，悬停看完整说明 */
+.driver {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  font-size: 9px;
+  overflow: hidden;
+}
+
+.driver--up {
+  color: var(--up);
+}
+
+.driver--down {
+  color: var(--down);
+}
+
+.driver__arrow {
+  font-size: 8px;
+}
+
+.driver__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver--headline .driver__label {
+  font-weight: 700;
+}
+
+.feed__bias {
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+.feed__bias--up {
+  color: var(--up);
+  background: rgba(46, 204, 143, 0.12);
+}
+
+.feed__bias--down {
+  color: var(--down);
+  background: rgba(255, 92, 108, 0.12);
+}
+
 .table-wrap {
   flex: 1;
   min-height: 0;
@@ -521,6 +682,26 @@ table.grid td.num {
 
 .grid--market .row {
   cursor: pointer;
+}
+
+.grid--market {
+  table-layout: fixed;
+}
+
+.grid--market .col--last {
+  width: 52px;
+}
+
+.grid--market .col--chg {
+  width: 56px;
+}
+
+.grid--market .col--driver {
+  width: 88px;
+}
+
+.grid--market td:first-child {
+  overflow: hidden;
 }
 
 .row:hover {

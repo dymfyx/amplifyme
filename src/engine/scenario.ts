@@ -1,7 +1,7 @@
 import type { NewsKind } from '../types'
 
 /**
- * 引擎用到的静态素材：可选标的、新闻剧本、系统派单素材。
+ * 引擎用到的静态素材：可选标的、新闻剧本、市场微观流动素材、系统派单素材。
  * 这里只放"配置"，不放状态，方便单测直接引用。
  */
 
@@ -12,7 +12,7 @@ export interface UniverseEntry {
   last: number
   /** 初始相对昨收的涨跌幅，用来反推 prevClose，让首屏和设计稿一致 */
   changePct: number
-  /** 每个 tick 的波动率 */
+  /** 波动率：只用来放大/缩小"同样的消息对不同名字的影响"，不再直接驱动随机噪声 */
   sigma: number
   /** 半个点差的基点（万分之一） */
   spreadBps: number
@@ -36,133 +36,284 @@ export interface NewsTemplate {
   tag: string
   impact: 1 | 2 | 3
   headline: string
+  /** 磁带上显示的短标签（≤ 16 字符） */
+  short: string
+  /** 利好 +1 / 利空 -1；不填表示中性提示，只进新闻流、不动价格 */
+  direction?: 1 | -1
   /** 影响的标的；不填表示整个市场 */
   symbol?: string
-  /** 事件冲击（比例）与方向 */
-  shock?: number
+  /** 这条消息最终推动价格的总幅度（基点），按标的波动率放大后再释放 */
+  driftBps?: number
 }
+
+/** 市场微观流动：每 0.5 秒的行情刷新都会抽一个来源，保证每次价格变动都有解释 */
+export interface FlowEvent {
+  id: string
+  label: string
+  /** 固定方向；0 表示随机（用来表示方向不明的指数/大宗流） */
+  direction: 1 | -1 | 0
+  /** 单次推动幅度（基点），会按标的波动率放大 */
+  bps: number
+  hint: string
+  /** 出现概率权重 */
+  weight: number
+}
+
+export const FLOW_EVENTS: FlowEvent[] = [
+  { id: 'flow-buy', label: 'buy flow', direction: 1, bps: 3, hint: 'A broker is working a buy order in the name', weight: 20 },
+  { id: 'flow-sell', label: 'sell flow', direction: -1, bps: 3, hint: 'Sell-side inventory is being worked', weight: 20 },
+  { id: 'flow-etf', label: 'ETF bid', direction: 1, bps: 5, hint: 'Index rebalance flow is leaning bid', weight: 10 },
+  { id: 'flow-etf-out', label: 'ETF offer', direction: -1, bps: 5, hint: 'Index rebalance flow is leaning offer', weight: 10 },
+  { id: 'flow-cover', label: 'short cover', direction: 1, bps: 5, hint: 'Shorts are covering into the move', weight: 8 },
+  { id: 'flow-unwind', label: 'long unwind', direction: -1, bps: 5, hint: 'A long is unwinding into the bid', weight: 8 },
+  { id: 'flow-retail', label: 'retail bid', direction: 1, bps: 2, hint: 'Retail flow is leaning bid', weight: 12 },
+  { id: 'flow-retail-out', label: 'retail sell', direction: -1, bps: 2, hint: 'Retail flow is leaning offer', weight: 12 },
+  { id: 'flow-index', label: 'index flow', direction: 0, bps: 3, hint: 'Index futures are driving the tape', weight: 12 },
+  { id: 'flow-block', label: 'block print', direction: 0, bps: 8, hint: 'A block just printed through the book', weight: 4 },
+]
 
 const MINUTE = 60
 const HOUR = 60 * MINUTE
 /** 15 个交易日 × 6.5 小时，与 simulation.ts 的 SESSION_SECONDS 保持一致 */
 const SESSION = 15 * 6.5 * HOUR
+/** 把 offset 写成占整局的比例，方便调密度 */
+const at = (fraction: number) => fraction * SESSION
 
 /**
- * 12 条剧本，均匀铺在 15 个交易日的压缩时间轴上。
- * 一条新闻大约隔 2–3 分钟真实时间（约 1 至 1.5 个模拟交易日），
- * 早期把 offset 挤在开盘后几十分钟会让右栏一秒弹三条，读都读不完。
+ * 20 条剧本，均匀铺在 15 个交易日的压缩时间轴上（约 1.5 分钟真实时间一条）。
+ * 每条消息都有明确的利好/利空方向与受影响标的：
+ * - 个股消息只推那一只（按它的波动率放大），
+ * - 宏观消息推全市场，但按 beta 缩放，所以同一句话对不同名字的影响不同。
+ * 中性的监管/风控提示只进新闻流，不制造价格变动。
  */
 export const NEWS_TEMPLATES: NewsTemplate[] = [
   {
     id: 'N1',
-    offset: 0.012 * SESSION,
+    offset: at(0.012),
     kind: 'macro',
     tag: 'MACRO',
     impact: 3,
     headline: 'Fed cuts rates to 0% and relaunches quantitative easing',
-    shock: 0.012,
+    short: 'Fed cut',
+    direction: 1,
+    driftBps: 55,
   },
   {
     id: 'N2',
-    offset: 0.1 * SESSION,
+    offset: at(0.055),
+    kind: 'equity',
+    tag: 'TSCO',
+    impact: 2,
+    headline: 'Tesco wins UK grocery share as volumes accelerate',
+    short: 'share gains',
+    direction: 1,
+    symbol: 'TSCO',
+    driftBps: 45,
+  },
+  {
+    id: 'N3',
+    offset: at(0.1),
     kind: 'note',
     tag: 'NOTE',
     impact: 2,
     headline: 'Investment banks: make sure you manage market risk across the exchange',
+    short: 'risk note',
   },
   {
-    id: 'N3',
-    offset: 0.175 * SESSION,
+    id: 'N4',
+    offset: at(0.145),
     kind: 'equity',
     tag: 'TSLA',
     impact: 3,
     headline: 'Tesla CFO announces investment in self-driving AI with a fully self-driving beta',
+    short: 'FSD investment',
+    direction: 1,
     symbol: 'TSLA',
-    shock: 0.016,
+    driftBps: 80,
   },
   {
-    id: 'N4',
-    offset: 0.25 * SESSION,
+    id: 'N5',
+    offset: at(0.175),
+    kind: 'equity',
+    tag: 'NFLX',
+    impact: 3,
+    headline: 'Netflix ad-tier signups top expectations across EMEA',
+    short: 'ad-tier signups',
+    direction: 1,
+    symbol: 'NFLX',
+    driftBps: 60,
+  },
+  {
+    id: 'N6',
+    offset: at(0.215),
     kind: 'equity',
     tag: 'DUOL',
     impact: 2,
     headline: 'Duolingo faces scrutiny in France over language certification standards',
+    short: 'France review',
+    direction: -1,
     symbol: 'DUOL',
-    shock: -0.021,
+    driftBps: 95,
   },
   {
-    id: 'N5',
-    offset: 0.33 * SESSION,
+    id: 'N7',
+    offset: at(0.25),
     kind: 'macro',
     tag: 'MACRO',
     impact: 3,
     headline: 'US Central Bank to decide rates in 1 minute — a cut to 1% is expected',
-    shock: -0.006,
+    short: 'rate cut odds',
+    direction: 1,
+    driftBps: 35,
   },
   {
-    id: 'N6',
-    offset: 0.41 * SESSION,
+    id: 'N8',
+    offset: at(0.295),
+    kind: 'equity',
+    tag: 'TSLA',
+    impact: 2,
+    headline: 'Tesla recalls 40k vehicles in Europe over a software fault',
+    short: 'EU recall',
+    direction: -1,
+    symbol: 'TSLA',
+    driftBps: 60,
+  },
+  {
+    id: 'N9',
+    offset: at(0.33),
     kind: 'note',
     tag: 'NOTE',
     impact: 1,
     headline: 'Investment banks: provide fast and competitive quotes for your clients',
+    short: 'quote note',
   },
   {
-    id: 'N7',
-    offset: 0.5 * SESSION,
-    kind: 'note',
-    tag: 'NOTE',
-    impact: 1,
-    headline: 'Risk: keep net exposure inside the desk limits, the session is being scored',
-  },
-  {
-    id: 'N8',
-    offset: 0.58 * SESSION,
+    id: 'N10',
+    offset: at(0.375),
     kind: 'equity',
-    tag: 'DUOL',
-    impact: 3,
-    headline: 'Duolingo extends its French certification review, shares whipsaw on the headline',
-    symbol: 'DUOL',
-    shock: 0.028,
+    tag: 'AZN',
+    impact: 2,
+    headline: 'AstraZeneca trial misses its primary endpoint in late-stage study',
+    short: 'trial miss',
+    direction: -1,
+    symbol: 'AZN',
+    driftBps: 70,
   },
   {
-    id: 'N9',
-    offset: 0.67 * SESSION,
+    id: 'N11',
+    offset: at(0.41),
     kind: 'macro',
     tag: 'MACRO',
     impact: 2,
     headline: 'Bond yields spike as the market digests the emergency rate cut',
-    shock: -0.009,
+    short: 'yields spike',
+    direction: -1,
+    driftBps: 45,
   },
   {
-    id: 'N10',
-    offset: 0.75 * SESSION,
+    id: 'N12',
+    offset: at(0.46),
+    kind: 'equity',
+    tag: 'NFLX',
+    impact: 2,
+    headline: 'Netflix lifts content spend guidance, margin risk back in focus',
+    short: 'content spend',
+    direction: -1,
+    symbol: 'NFLX',
+    driftBps: 50,
+  },
+  {
+    id: 'N13',
+    offset: at(0.5),
+    kind: 'note',
+    tag: 'NOTE',
+    impact: 1,
+    headline: 'Risk: keep net exposure inside the desk limits, the session is being scored',
+    short: 'risk limits',
+  },
+  {
+    id: 'N14',
+    offset: at(0.545),
+    kind: 'equity',
+    tag: 'DUOL',
+    impact: 3,
+    headline: 'Duolingo extends its French certification review, shares whipsaw on the headline',
+    short: 'review extended',
+    direction: 1,
+    symbol: 'DUOL',
+    driftBps: 110,
+  },
+  {
+    id: 'N15',
+    offset: at(0.58),
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 3,
+    headline: 'AstraZeneca gets FDA fast-track for its oncology candidate',
+    short: 'FDA fast-track',
+    direction: 1,
+    symbol: 'AZN',
+    driftBps: 75,
+  },
+  {
+    id: 'N16',
+    offset: at(0.63),
+    kind: 'equity',
+    tag: 'TSCO',
+    impact: 2,
+    headline: 'Barclays downgrades Tesco to underweight on margin pressure',
+    short: 'downgrade',
+    direction: -1,
+    symbol: 'TSCO',
+    driftBps: 55,
+  },
+  {
+    id: 'N17',
+    offset: at(0.71),
     kind: 'equity',
     tag: 'TSLA',
     impact: 2,
     headline: 'Tesla deliveries beat consensus, guidance left unchanged',
+    short: 'deliveries beat',
+    direction: 1,
     symbol: 'TSLA',
-    shock: 0.011,
+    driftBps: 55,
   },
   {
-    id: 'N11',
-    offset: 0.84 * SESSION,
+    id: 'N18',
+    offset: at(0.79),
+    kind: 'equity',
+    tag: 'DUOL',
+    impact: 2,
+    headline: 'Duolingo daily active users slow, engagement worries build',
+    short: 'DAU slowdown',
+    direction: -1,
+    symbol: 'DUOL',
+    driftBps: 65,
+  },
+  {
+    id: 'N19',
+    offset: at(0.88),
     kind: 'equity',
     tag: 'AZN',
     impact: 2,
     headline: 'AstraZeneca lifts full-year guidance on oncology sales',
+    short: 'guidance lift',
+    direction: 1,
     symbol: 'AZN',
-    shock: 0.014,
+    driftBps: 60,
   },
   {
-    id: 'N12',
-    offset: 0.92 * SESSION,
+    id: 'N20',
+    offset: at(0.96),
     kind: 'equity',
     tag: 'NFLX',
     impact: 3,
     headline: 'Netflix raises prices across EMEA as subscriber growth beats estimates',
+    short: 'pricing power',
+    direction: 1,
     symbol: 'NFLX',
-    shock: 0.019,
+    driftBps: 85,
   },
 ]
 

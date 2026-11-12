@@ -4,6 +4,7 @@ import {
   DAY_SECONDS,
   PRICE_UPDATE_TICKS,
   SESSION_SECONDS,
+  SIM_SECONDS_PER_TICK,
   STARTING_CASH,
   START_SECONDS,
   applyPositionFill,
@@ -13,8 +14,10 @@ import {
   fillClientOrder,
   formatClock,
   selectChartMarkers,
+  selectInstruments,
   selectPnl,
   selectPositions,
+  selectPriceTape,
   selectSessionMeta,
   sendQuote,
   setSpeed,
@@ -130,9 +133,49 @@ describe('market data', () => {
   it('reveals headlines as the clock passes them', () => {
     const state = advanceSession(session(), 110)
     expect(state.news.length).toBeGreaterThanOrEqual(1)
-    expect(state.pendingNews.length).toBeLessThan(12)
+    expect(state.pendingNews.length).toBeLessThan(20)
     expect(state.chartEvents.length).toBeGreaterThanOrEqual(1)
     expect(selectChartMarkers(state, 'AZN').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('explains every price refresh with a named driver', () => {
+    const state = advanceSession(session(), 60)
+    for (const instrument of state.instruments) {
+      if (instrument.driver === null) {
+        // 没有驱动就不该动：屏幕上看到的每一分价格变化都有来源
+        expect(instrument.lastMove).toBe(0)
+      } else {
+        expect(instrument.driver.label.length).toBeGreaterThan(0)
+      }
+    }
+    const tape = selectPriceTape(state)
+    expect(tape.length).toBeGreaterThan(0)
+    for (const change of tape) {
+      expect(change.drivers.length).toBeGreaterThan(0)
+      expect(Math.sign(change.bps)).toBe(change.direction)
+    }
+  })
+
+  it('pushes a stock by the direction of its headline, not by noise', () => {
+    const start = session(7)
+    // 找一条针对 DUOL 的利空，走到它发布前一帧，再跑过它的释放窗口
+    const news = start.pendingNews.find((item) => item.symbol === 'DUOL' && item.direction === -1)
+    expect(news).toBeTruthy()
+    const frames = Math.ceil(((news?.at ?? 0) - START_SECONDS) / SIM_SECONDS_PER_TICK) - 1
+    const before = advanceSession(start, frames)
+    const duolBefore = before.instruments.find((instrument) => instrument.symbol === 'DUOL')?.last ?? 0
+    const after = advanceSession(before, PRICE_UPDATE_TICKS * 15)
+    const duol = after.instruments.find((instrument) => instrument.symbol === 'DUOL')
+    expect(after.news.some((item) => item.id === news?.id)).toBe(true)
+    expect(duol?.last ?? 0).toBeLessThan(duolBefore)
+    expect(duol?.driver).not.toBeNull()
+  })
+
+  it('keeps the drift sane over a whole session', () => {
+    const state = advanceSession(session(11), Math.floor(SESSION_SECONDS / SIM_SECONDS_PER_TICK))
+    for (const instrument of selectInstruments(state)) {
+      expect(Math.abs(instrument.changePct)).toBeLessThan(25)
+    }
   })
 
   it('routes fresh system dispatches over time', () => {

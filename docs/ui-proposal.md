@@ -424,3 +424,56 @@ P0 已交付：
   的佣金吃成 −1,020；5bps 下同一笔来回净赚约 13,506。
 - 测试：`src/engine/scoring.test.ts` 10 例（遥测记录、edge 方向、结算统计、空局中性、六维边界、盈利/亏损局 returns 对照），
   `simulation.test.ts` 增现金/节奏/收盘断言，总计 69 例全绿。
+## 16. P2.5：事件驱动价格 + 价格磁带（m01435）
+
+### 16.1 需求
+
+- 组里其他人也要能练：**一个链接分享**或独立软件，打开即玩。
+- 新闻改成**事件驱动**：利好/利空按股票分别推动价格偏移，而不是简单扰动随机数。
+- 波动再细：**每次价格变动都要有明确的利好/利空来源**。
+
+### 16.2 引擎模型（`src/engine/simulation.ts`）
+
+- 价格 = Σ 具名驱动，不再有裸噪声。每次行情刷新（`PRICE_UPDATE_TICKS = 2`，0.5 秒）计算：
+  `netBps = Σ(已释放的新闻冲量 bps × direction) + 微观流动 bps × direction`，
+  再 `last = round2(max(0.01, last × (1 + netBps / 10000)))`。
+- **新闻冲量** `PriceImpulse{ id, label, direction, bps, ttl, hint }`：头条到点后按标的生成，
+  幅度 = `driftBps × volScale(sigma)`（`volScale = clamp(sigma / 0.0018, 0.7, 1.8)`），
+  宏观消息对所有 `SYMBOLS` 生成、每个名字按各自波动率放大。每帧释放 `DRIFT_RELEASE = 0.25`，
+  `ttl` 24 帧（≈12 秒）耗尽；剩余 < 0.5bps 丢弃。
+- **微观流动** `FLOW_EVENTS`（`src/engine/scenario.ts`）：buy flow / sell pressure / ETF bid / short cover /
+  retail bid / profit take / index flow / block print，按 `weight` 抽取；`bps` 6–24，乘以
+  `(0.7 + sizeRoll × 0.8) × volScale`，所以每 0.5 秒一定有一个可命名的来源。
+- `PriceChangeRecord` 记到 `SimulationState.priceTape`（上限 `PRICE_TAPE_LIMIT = 180`）：
+  `{ id: PX-<tick>-<symbol>, tick, time, symbol, price, pct, bps, direction, drivers[] }`；
+  `drivers` 按 bps 降序取前 `MAX_PRICE_DRIVERS = 3`，`instrument.driver` 取与净方向一致的最大驱动。
+- 盘口：`headlineBps ≥ FORCED_REBOOK_BPS (12)` 或 mid 移动 ≥ `BOOK_MIN_MOVE_BPS (8)` 才重挂，
+  否则沿用旧簿只更新 `bookMid`，避免整屏闪烁。
+- 剧本 `NEWS_TEMPLATES` 重写为 20 条，每条带 `short`（磁带短标签）、`direction`、`symbol`、
+  `driftBps`（±35–110bps，宏观对全市场）；另有中性 NOTE 只进新闻流不动价格。
+- 删除 `PRICE_VOL_PER_UPDATE` 与高斯/跳价随机项（跳价并由 block print / 宏观头条替代）。
+
+### 16.3 界面
+
+- 右栏新增 **7 PRICE TAPE**（`src/components/PriceTape.tsx`）：每行 时间 / 标的 / 涨跌% / 驱动 chip，
+  行左侧按方向染绿/红，点行切标的；只显示 `|bps| ≥ 10` 或含 headline 驱动的记录，最多 7 行。
+- **1 MARKET WATCH** 的 `TYPE` 列换成 `DRIVER`：箭头 + 短标签 + title 完整说明；表格改 `table-layout: fixed`，
+  三列宽度 52/56/88px，1280 下仍不裁切。
+- **8 EVENT FEED** 每条加 `▲ BULLISH` / `▼ BEARISH` 徽标（`NewsItem.direction`），中性 NOTE 不显示。
+- 面板编号顺延：EVENT FEED 7 → 8。
+
+### 16.4 测试
+
+- `simulation.test.ts` 新增 2 例（每次刷新都有具名 driver、磁带方向与 bps 同号；DUOL 的利空头条发布后
+  价格下跌且头条已揭示），并把 `pendingNews.length` 上限断言从 12 改 20；引擎 30 例。
+- `app.test.tsx` 新增 3 例（每个标的都有 DRIVER 且 title 含 bps、PRICE TAPE 可点行切标的、EVENT FEED 出现
+  BULLISH/BEARISH 徽标）；UI 27 例。
+- 总计 **81 例全绿**（engine 30 + scoring 10 + app 27 + launcher 7 + deploy 7）。
+
+### 16.5 部署（由 deploy 队友交付，见 README「Publish a link」）
+
+- `vite.config.ts` `base: './'`，dist 可在任意子路径与 `file://` 下工作。
+- `npm run build:single`（`scripts/build-single.mjs`，零依赖）把 CSS/JS/favicon 内联成一个
+  ~330 KB 的 `dist-single/index.html`，可直接发微信/邮件，双击即玩。
+- GitHub Pages workflow（`.github/workflows/deploy.yml`）+ `netlify.toml`：推仓即出公网链接；
+  哈希路由（`#sales` / `#market-maker`）不需要 SPA 重写规则。

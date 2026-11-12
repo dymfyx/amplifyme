@@ -1,0 +1,5 @@
+# Netlify build settings. The app is a static, client-side bundle:
+# no functions, no redirects (hash routing means every deep link hits index.html).
+[build]
+  command = "npm run build"
+  publish = "dist"

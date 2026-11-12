@@ -12,7 +12,7 @@ import type {
   TradeRow,
 } from '../types'
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
-import { CLIENTS, DISPATCH_NOTES, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
+import { CLIENTS, DISPATCH_NOTES, FLOW_EVENTS, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
 import {
   createTelemetry,
   recordDecline,
@@ -42,12 +42,23 @@ export const START_SECONDS = 9 * 3600 + 30 * 60
 export const SIM_SECONDS_PER_TICK = SESSION_SECONDS / ((30 * 60 * 1000) / TICK_MS)
 /**
  * 行情节奏：时钟每帧都走，但价格与盘口每 2 帧（0.5 秒真实时间）才刷新一次。
- * 单次幅度乘 1/√2：同样长度的行情波动，但每次跳得更细，看起来更像真实盘口。
+ * 每次刷新都由「一个微观流动来源 + 尚未释放完的新闻冲击」推动，没有无来源的随机噪声。
  */
 export const PRICE_UPDATE_TICKS = 2
-export const PRICE_VOL_PER_UPDATE = Math.SQRT1_2
+/** 新闻冲击每帧释放剩余幅度的 25%，几帧内释放完但会留下明显方向 */
+const DRIFT_RELEASE = 0.25
+/** 每条新闻冲击最多存活多少帧行情（超过就清掉，避免长尾一直拖） */
+const DRIFT_TTL = 24
+/** 每帧最多保留几个驱动因素写进价格记录 */
+const MAX_PRICE_DRIVERS = 3
+/** 价格记录（供 PRICE TAPE 面板）保留多少条 */
+const PRICE_TAPE_LIMIT = 180
 /** 只有当价格相对上次建簿的位置移动超过这个基点，才重建盘口 */
 export const BOOK_MIN_MOVE_BPS = 8
+/** 单条新闻冲击大于这个基点时强制重挂盘口（大消息必须立刻体现在报价上） */
+const FORCED_REBOOK_BPS = 12
+/** 每次行情刷新有多大概率出现一笔微观流动：价格只在有驱动时才动，没有驱动就不动 */
+const FLOW_CHANCE = 0.45
 /** 佣金按成交额的 5 个基点/边计（真实股票佣金量级），不会吃掉正常点差利润 */
 export const COMMISSION_RATE = 0.0005
 /** 销售/做市台的总持有资金上限 */
@@ -65,6 +76,47 @@ const pad = (value: number) => String(Math.floor(value)).padStart(2, '0')
 
 export type SessionStatus = 'RUNNING' | 'PAUSED' | 'CLOSED'
 
+/** 价格变动的解释来源：headline = 新闻冲量，flow = 市场微观流动 */
+export type DriverSource = 'headline' | 'flow'
+
+/** 某一次价格刷新里起作用的一个驱动因素 */
+export interface PriceDriver {
+  /** 短标签，磁带上显示，如 'Fed cut' / 'buy-side flow' */
+  label: string
+  direction: 1 | -1
+  /** 这次释放的基点 */
+  bps: number
+  source: DriverSource
+  /** 悬停时展示的完整说明（新闻标题或流动描述） */
+  hint: string
+}
+
+/** 尚未释放完的新闻冲击：每帧释放剩余幅度的一部分，逐帧衰减 */
+export interface PriceImpulse {
+  id: string
+  label: string
+  direction: 1 | -1
+  /** 剩余未释放的基点 */
+  bps: number
+  ttl: number
+  hint: string
+}
+
+/** 一次价格刷新的完整记录，喂给 PRICE TAPE 面板 */
+export interface PriceChangeRecord {
+  id: string
+  tick: number
+  time: string
+  symbol: string
+  price: number
+  /** 相对上一次刷新的涨跌幅（%） */
+  pct: number
+  /** 本次净推动（基点），正=利好 */
+  bps: number
+  direction: 1 | -1
+  drivers: PriceDriver[]
+}
+
 export interface InstrumentState {
   symbol: string
   name: string
@@ -78,6 +130,10 @@ export interface InstrumentState {
   book: Book
   /** 上次建簿时的中间价，用来判断盘口要不要跟着重挂 */
   bookMid: number
+  /** 还在释放中的新闻冲击 */
+  impulses: PriceImpulse[]
+  /** 最近一次价格变动的解释（市场表 DRIVER 列用） */
+  driver: PriceDriver | null
 }
 
 export interface EnginePosition {
@@ -116,7 +172,11 @@ export interface ChartEvent {
 
 export interface PendingNews extends NewsItem {
   at: number
-  shock?: number
+  /** 短标签，作为价格驱动显示 */
+  short: string
+  direction?: 1 | -1
+  /** 这条消息最终要推动的总基点（按标的波动率放大后释放） */
+  driftBps?: number
   symbol?: string
 }
 
@@ -139,6 +199,8 @@ export interface SimulationState {
   news: NewsItem[]
   pendingNews: PendingNews[]
   chartEvents: ChartEvent[]
+  /** 每次价格刷新的解释记录，最新在末尾（PRICE TAPE 面板的数据源） */
+  priceTape: PriceChangeRecord[]
   commission: number
   /** 可用资金（买入扣钱、卖出加钱），不能为负 */
   cash: number
@@ -285,6 +347,8 @@ export function createSession(seed = randomSeed(), openingBook: OpeningPosition[
       series,
       book,
       bookMid: entry.last,
+      impulses: [],
+      driver: null,
     }
   })
 
@@ -312,11 +376,14 @@ export function createSession(seed = randomSeed(), openingBook: OpeningPosition[
       kind: template.kind,
       impact: template.impact,
       headline: template.headline,
+      direction: template.direction,
       at: START_SECONDS + template.offset,
-      shock: template.shock,
+      short: template.short,
+      driftBps: template.driftBps,
       symbol: template.symbol,
     })),
     chartEvents: [],
+    priceTape: [],
     commission: 0,
     cash: STARTING_CASH,
     nextDispatchAt: START_SECONDS + 900,
@@ -358,6 +425,20 @@ function bookOf(instruments: InstrumentState[], symbol: string): Book {
   return instruments.find((item) => item.symbol === symbol)?.book ?? { bids: [], asks: [] }
 }
 
+/** 波动率缩放：同一句话对不同名字的影响不同（高波动名字反应更大） */
+const volScale = (sigma: number) => Math.min(1.8, Math.max(0.7, sigma / 0.0018))
+
+/** 按权重抽一个微观流动来源（每次行情刷新都会抽一个，保证价格变动有解释） */
+function pickFlowEvent(roll: number) {
+  const total = FLOW_EVENTS.reduce((sum, event) => sum + event.weight, 0)
+  let target = roll * total
+  for (const event of FLOW_EVENTS) {
+    target -= event.weight
+    if (target <= 0) return event
+  }
+  return FLOW_EVENTS[FLOW_EVENTS.length - 1]
+}
+
 /* ------------------------------------------------------------------ */
 /* 推进                                                                */
 /* ------------------------------------------------------------------ */
@@ -380,6 +461,7 @@ export function stepSession(state: SimulationState): SimulationState {
     kind: item.kind,
     impact: item.impact,
     headline: item.headline,
+    direction: item.direction,
   }))
   const news = revealed.length === 0 ? state.news : [...state.news, ...revealed]
   for (const item of revealed) {
@@ -391,45 +473,109 @@ export function stepSession(state: SimulationState): SimulationState {
   const chartEvents =
     revealedEvents.length === 0 ? state.chartEvents : [...state.chartEvents, ...revealedEvents].slice(-40)
 
-  const shocks = new Map<string, number>()
+  /* 1b. 把到点的新闻转成对标的的价格冲量：利好推高、利空压低，按标的波动率放大后逐帧释放 */
+  const impulsesBySymbol = new Map<string, PriceImpulse[]>()
   for (const item of due) {
-    if (!item.shock) continue
-    if (item.symbol) {
-      shocks.set(item.symbol, (shocks.get(item.symbol) ?? 0) + item.shock)
-    } else {
-      for (const instrument of state.instruments) {
-        shocks.set(instrument.symbol, (shocks.get(instrument.symbol) ?? 0) + item.shock)
+    if (!item.direction || !item.driftBps) continue
+    const targets = item.symbol ? [item.symbol] : SYMBOLS
+    for (const symbol of targets) {
+      const instrument = state.instruments.find((candidate) => candidate.symbol === symbol)
+      if (!instrument) continue
+      const impulse: PriceImpulse = {
+        id: `${item.id}-${symbol}`,
+        label: item.short,
+        direction: item.direction,
+        bps: round2(item.driftBps * volScale(instrument.sigma)),
+        ttl: DRIFT_TTL,
+        hint: item.headline,
       }
+      impulsesBySymbol.set(symbol, [...(impulsesBySymbol.get(symbol) ?? []), impulse])
     }
   }
 
-  /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（1 秒）才刷新一次 */
+  /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（0.5 秒）才刷新一次 */
   const priceDue = tick - state.lastPriceTick >= PRICE_UPDATE_TICKS
+  let priceTape = state.priceTape
   const instruments = priceDue
     ? state.instruments.map((instrument) => {
-        const [move, afterMove] = normalish(rng)
-        rng = afterMove
-        const [jumpRoll, afterJump] = nextRandom(rng)
-        rng = afterJump
-        let jump = 0
-        if (jumpRoll < 0.012) {
-          const [extreme, afterExtreme] = normalish(rng)
-          rng = afterExtreme
-          jump = extreme * instrument.sigma * PRICE_VOL_PER_UPDATE * 6
-        }
-        /* 宏观冲击按个股波动率（beta）放大：高波动名字对同一条新闻反应更大 */
-        const beta = Math.min(1.6, Math.max(0.6, instrument.sigma / 0.0018))
-        const shock = (shocks.get(instrument.symbol) ?? 0) * beta
-        const step = instrument.sigma * PRICE_VOL_PER_UPDATE
-        const next = Math.max(0.01, instrument.last * (1 + move * step + jump + shock))
-        const last = round2(next)
+        const scale = volScale(instrument.sigma)
 
-        /* 盘口只在价格相对上次挂单的位置明显移动（或遇到新闻/跳价）时才重挂 */
+        /* 先释放还没走完的新闻冲量 + 本帧刚到点的新闻冲量 */
+        const released: PriceDriver[] = []
+        const impulses: PriceImpulse[] = []
+        for (const impulse of [...instrument.impulses, ...(impulsesBySymbol.get(instrument.symbol) ?? [])]) {
+          const bps = round2(impulse.bps * DRIFT_RELEASE)
+          if (bps >= 0.05) {
+            released.push({
+              label: impulse.label,
+              direction: impulse.direction,
+              bps,
+              source: 'headline',
+              hint: impulse.hint,
+            })
+          }
+          const remaining = round2(impulse.bps * (1 - DRIFT_RELEASE))
+          const ttl = impulse.ttl - 1
+          if (ttl > 0 && remaining >= 0.5) impulses.push({ ...impulse, bps: remaining, ttl })
+        }
+
+        /* 本帧的微观流动来源：不是每一帧都有成交，但只要有价格变动就一定有来源 */
+        const [chanceRoll, afterChance] = nextRandom(rng)
+        rng = afterChance
+        let flowDriver: PriceDriver | null = null
+        if (chanceRoll < FLOW_CHANCE) {
+          const [flowRoll, afterFlow] = nextRandom(rng)
+          rng = afterFlow
+          const [sizeRoll, afterSize] = nextRandom(rng)
+          rng = afterSize
+          const [dirRoll, afterDir] = nextRandom(rng)
+          rng = afterDir
+          const event = pickFlowEvent(flowRoll)
+          const flowDirection = (event.direction === 0 ? (dirRoll < 0.5 ? -1 : 1) : event.direction) as 1 | -1
+          flowDriver = {
+            label: event.label,
+            direction: flowDirection,
+            bps: round2(event.bps * (0.7 + sizeRoll * 0.8) * scale),
+            source: 'flow',
+            hint: event.hint,
+          }
+        }
+
+        const netBps = round2(
+          released.reduce((sum, driver) => sum + driver.direction * driver.bps, 0) +
+            (flowDriver ? flowDriver.direction * flowDriver.bps : 0),
+        )
+        const last = round2(Math.max(0.01, instrument.last * (1 + netBps / 10000)))
+        const direction: 1 | -1 = netBps >= 0 ? 1 : -1
+        const drivers = [...released, ...(flowDriver ? [flowDriver] : [])]
+          .sort((a, b) => b.bps - a.bps)
+          .slice(0, MAX_PRICE_DRIVERS)
+        /* 用「和实际涨跌方向一致的最大驱动」解释这次变动，箭头就不会和标签打架 */
+        const driver = drivers.find((candidate) => candidate.direction === direction) ?? drivers[0] ?? null
+
+        if (last !== instrument.last) {
+          priceTape = [
+            ...priceTape,
+            {
+              id: `PX-${tick}-${instrument.symbol}`,
+              tick,
+              time: formatShortTime(simSeconds),
+              symbol: instrument.symbol,
+              price: last,
+              pct: round2(((last - instrument.last) / instrument.last) * 100),
+              bps: netBps,
+              direction,
+              drivers,
+            },
+          ].slice(-PRICE_TAPE_LIMIT)
+        }
+
+        /* 盘口只在价格相对上次挂单的位置明显移动、或刚吃到一条大新闻时才重挂 */
         const movedBps = (Math.abs(last - instrument.bookMid) / instrument.bookMid) * 10000
-        const forcedRefresh = shock !== 0 || jump !== 0
+        const headlineBps = released.reduce((sum, candidate) => sum + candidate.bps, 0)
         let book = instrument.book
         let bookMid = instrument.bookMid
-        if (forcedRefresh || movedBps >= BOOK_MIN_MOVE_BPS) {
+        if (headlineBps >= FORCED_REBOOK_BPS || movedBps >= BOOK_MIN_MOVE_BPS) {
           const [nextBook, afterBook] = makeBook(rng, last, instrument.spreadBps, instrument.lot, instrument.book)
           rng = afterBook
           book = nextBook
@@ -443,12 +589,13 @@ export function stepSession(state: SimulationState): SimulationState {
           series: [...instrument.series.slice(-(CHART_POINTS - 1)), last],
           book,
           bookMid,
+          impulses,
+          driver,
         }
       })
     : state.instruments.map((instrument) =>
         instrument.lastMove === 0 ? instrument : { ...instrument, lastMove: 0 },
       )
-
   /* 3. 报价存活、成交与过期 */
   let positions = state.positions
   let trades = state.trades
@@ -596,6 +743,7 @@ export function stepSession(state: SimulationState): SimulationState {
     news,
     pendingNews,
     chartEvents,
+    priceTape,
     commission,
     cash,
     nextDispatchAt,
@@ -916,6 +1064,20 @@ export function selectChartMarkers(
 
 export function selectCash(state: SimulationState): number {
   return round2(state.cash)
+}
+
+/** 最近的价格变动记录：只留下有明显来源或幅度够看的，给 PRICE TAPE 面板 */
+export function selectPriceTape(state: SimulationState, limit = 7, minBps = 4): PriceChangeRecord[] {
+  const notable = state.priceTape.filter(
+    (change) =>
+      Math.abs(change.bps) >= minBps || change.drivers.some((driver) => driver.source === 'headline'),
+  )
+  return notable.slice(-limit)
+}
+
+/** 每个标的最新一次价格变动的解释，给 MARKET WATCH 的 DRIVER 列 */
+export function selectDrivers(state: SimulationState): Record<string, PriceDriver | null> {
+  return Object.fromEntries(state.instruments.map((instrument) => [instrument.symbol, instrument.driver]))
 }
 
 export function selectSessionMeta(state: SimulationState, latencyMs = 0): SessionMeta {

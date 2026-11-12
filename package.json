@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:single": "npm run build && node scripts/build-single.mjs",
     "preview": "vite preview",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File launcher/install-shortcut.ps1",
     "test": "vitest run",

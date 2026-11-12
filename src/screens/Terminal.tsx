@@ -6,9 +6,11 @@ import {
   selectBook,
   selectCash,
   selectChartMarkers,
+  selectDrivers,
   selectInstruments,
   selectPnl,
   selectPositions,
+  selectPriceTape,
   selectSessionMeta,
   selectSeries,
   type FillInput,
@@ -23,6 +25,7 @@ import DispatchPanel from '../components/DispatchPanel'
 import EventFeed from '../components/EventFeed'
 import MarketWatch from '../components/MarketWatch'
 import PositionsPanel from '../components/PositionsPanel'
+import PriceTape from '../components/PriceTape'
 import ScoreDrawer from '../components/ScoreDrawer'
 import SettlementReport from '../components/SettlementReport'
 import StatusBar from '../components/StatusBar'
@@ -52,6 +55,8 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
   const book = selectBook(state, selected)
   const series = selectSeries(state, selected)
   const markers = selectChartMarkers(state, selected)
+  const drivers = selectDrivers(state)
+  const tape = selectPriceTape(state)
   const rfqs = state.dispatch
   const activeRfq = rfqs.find((item) => item.id === activeRfqId)
   const meta = selectSessionMeta(state, simulation.latencyMs)
@@ -114,7 +119,12 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
 
       <main className="workspace">
         <aside className="rail rail--left">
-          <MarketWatch instruments={instruments} selected={selected} onSelect={setSelected} />
+          <MarketWatch
+            instruments={instruments}
+            selected={selected}
+            drivers={drivers}
+            onSelect={setSelected}
+          />
           <BookPanel symbol={selected} book={book} />
           <DispatchPanel rfqs={rfqs} activeId={activeRfqId ?? ''} onSelect={selectRfq} role={role} />
         </aside>
@@ -138,6 +148,7 @@ export default function Terminal({ role, openingBook, onExit }: TerminalProps) {
         </section>
 
         <aside className="rail rail--right">
+          <PriceTape changes={tape} selected={selected} onSelect={setSelected} />
           <EventFeed news={state.news} />
           <button
             type="button"

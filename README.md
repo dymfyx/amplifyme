@@ -74,8 +74,10 @@ A 250 ms tick is not a price update. The tape refreshes on a slower cadence so t
 | Knob | Value | Meaning |
 |---|---|---|
 | `PRICE_UPDATE_TICKS` | 2 | Prices move **twice a second**; the ticks in between only advance the clock |
-| `PRICE_VOL_PER_UPDATE` | `√½` | Each update moves ~29% less than a full tick, so the tape is finer without becoming more volatile |
-| `BOOK_MIN_MOVE_BPS` | 8 | The five-level book is only rebuilt once the mid has moved 8 bps (0.08%); headlines and jumps force a rebuild |
+| `BOOK_MIN_MOVE_BPS` | 8 | The five-level book is only rebuilt once the mid has moved 8 bps (0.08%) |
+| `FORCED_REBOOK_BPS` | 12 | A headline worth at least 12 bps to that name rebuilds the book immediately |
+| `DRIFT_RELEASE` / `DRIFT_TTL` | 0.25 / 24 | A headline releases a quarter of its remaining drift per update, over 24 updates (~12 s) |
+| `FLOW_CHANCE` | 0.45 | Only ~45% of updates carry an order-flow print; with no driver the price simply does not move |
 
 Each price update appends one point to the chart series, so the `30M / 2H / 6H / 1D` ranges read as
 97.5-second bars (240 bars per trading day). Order sizes are carried over with a ±30% jitter between
@@ -83,6 +85,19 @@ rebuilds instead of being re-drawn from scratch.
 
 Quotes and client orders in the ticket follow the live book until you edit a price field, so you never send a
 stale price by accident.
+
+### What moves the tape
+
+Prices are event driven: every update is the sum of **named drivers**, so no move is random noise.
+
+| Driver | Where it comes from | Typical size |
+|---|---|---|
+| `headline` | a released news item with `direction` (+1/-1) and `driftBps` in `src/engine/scenario.ts`, scaled by the name's `sigma` (0.7x-1.8x) | up to ±110 bps, released over ~12 s |
+| `flow` | one of ten balanced microstructure events in `FLOW_EVENTS` (buy flow / sell flow, ETF bid / ETF offer, short cover / long unwind, retail bid / retail sell, index flow, block print), drawn by weight with equal bullish/bearish mass | 2-8 bps per update |
+
+The `PRICE TAPE` panel lists every material update with its drivers, and the `DRIVER` column in
+`MARKET WATCH` shows the latest cause per name (hover for the full remark). The event feed tags each
+headline `▲ BULLISH` or `▼ BEARISH`; 20 scripted headlines play out across the 15 days.
 
 ### Seeds and restarts
 
@@ -172,13 +187,14 @@ src/
     Terminal.tsx        trading shell composition
   components/
     TopBar.tsx          brand, P&L strip, CASH, SCORE / RESTART / EXIT
-    MarketWatch.tsx     instrument list, click to load
+    MarketWatch.tsx     instrument list with the live DRIVER column, click to load
     BookPanel.tsx       depth ladder with spread
     DispatchPanel.tsx   system-dispatched RFQs -> ticket
     TradeTicket.tsx     role-aware quote / order ticket + quote tabs
     ChartPanel.tsx      SVG price chart with event markers and volume
     PositionsPanel.tsx  BOOK tabs: positions / orders / trades
-    EventFeed.tsx       news feed with tag and impact
+    PriceTape.tsx       why each price moved: drivers per update, click to load
+    EventFeed.tsx       news feed with tag, bias arrow and impact
     ScoreDrawer.tsx     hidden live scorecard drawer
     SettlementReport.tsx end-of-session report: P&L, flow, risk, score, coaching
     StatusBar.tsx       sim clock, day counter, seed, session state
@@ -198,18 +214,58 @@ docs/ui-proposal.md     layout proposal, decisions and roadmap
 
 ## Status
 
-**P2 complete** — live clock, paced tick stream, event shocks, quote/order fills, cash settlement and
-mark-to-market P&L all run off the simulation engine, and the scorecard plus end-of-session report are computed
-from the decision telemetry (no placeholder numbers left in the app).
+**P2 complete** — live clock, event-driven tape, quote/order fills, cash settlement and mark-to-market P&L all
+run off the simulation engine, and the scorecard plus end-of-session report are computed from the decision
+telemetry (no placeholder numbers left in the app). The site builds to plain static files: GitHub Pages,
+Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-link)).
 
 | Phase | Scope |
 |---|---|
 | P0 (done) | Static shell, role selection, all panels on mock data |
 | P1 (done) | Clock control, tick stream, quotes/orders, fills, mark-to-market P&L |
 | P2 (done) | Decision telemetry -> live scorecard + settlement report, 5 bps commission, 0.5 s tape |
+| P2.5 (done) | Event-driven prices with named drivers, PRICE TAPE panel, static hosting / single-file build |
 | P3 | Polish: replay, sounds, resizable panels, session save/restore |
 
 ## Working rules
 
 See `AGENTS.md`: every change ships with a matching git commit and updated tests, and the full suite must be
 green before hand-off.
+
+## Publish a link
+
+Everything — market data, simulation engine, scoring — runs in the browser, so there is no backend, database or
+secret to deploy. Any static file host will do.
+
+### GitHub Pages (permanent URL)
+
+1. Push the repo to GitHub. The workflow in `.github/workflows/deploy.yml` deploys on every push to `main`; adjust
+   the branch filter there if your default branch is named differently.
+2. In the repository: **Settings → Pages → Source: GitHub Actions**.
+3. The workflow builds the app and publishes `dist/`; the terminal lives at
+   `https://<user>.github.io/<repo>/`.
+
+The app is hash-routed (`#sales`, `#market-maker`), so no SPA rewrite rule is needed and deep links keep working.
+
+### Netlify Drop (instant URL, no CI)
+
+Run `npm run build`, then drag the `dist/` folder onto [app.netlify.com/drop](https://app.netlify.com/drop) — you
+get a public URL straight away. The committed `netlify.toml` already pins `npm run build` and `dist/` if you connect
+the repo to Netlify instead.
+
+### Single file (chat / email / USB stick)
+
+```bash
+npm run build:single
+```
+
+This builds the app and writes `dist-single/index.html`: one self-contained file (~330 KB) with the CSS, the JS
+bundle and the favicon inlined as data URIs. Send it to a teammate over chat or email — they double-click it and
+play offline in any modern browser. No server, no install, no asset folder to keep together.
+
+### Any other static host
+
+Because every part of the app is client-side, anything that serves static files works: Cloudflare Pages, Vercel,
+S3 + CloudFront, an internal nginx box, `npx serve dist` — serve the contents of `dist/` at any subpath and the
+relative asset URLs take care of the rest.
+
