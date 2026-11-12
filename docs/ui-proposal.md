@@ -291,10 +291,36 @@ MM 的持仓额外显示：**库存（Inventory）**、库存限额使用率、�
 
 ---
 
-## 11. 待确认
+## 11. 待确认（已全部确认，结论见 §12）
 
 1. 界面语言：中文 / 英文 / 中英双语？
 2. 最低分辨率按 1280 够吗，还是需要支持 1024 宽平板？
 3. MM 的**客户聊天**第一版就要，还是先做"系统派单询价"简化版？
 4. 评分面板：中途显示等级（本方案）还是完全不显示、只给风险警告？
 5. 下一步是否先做一版**可点击的 HTML 静态原型**（mock 数据、无引擎）给你确认手感？
+
+---
+
+## 12. 决策落地记录（P0 骨架已实现）
+
+用户确认（m00067 / m00069）后落地的结论：
+
+| # | 问题 | 结论 |
+|---|---|---|
+| 1 | 界面语言 | **全英文**：所有标签、按钮、提示、状态均为英文；代码注释与文档内部说明保持中文 |
+| 2 | 评分面板 | **默认隐藏**：顶栏 `SCORE` 按钮与右栏 teaser 打开抽屉，`ESC` 或点击遮罩关闭 |
+| 3 | 客户聊天 | **不做**，改为**系统派单**：左栏 `DISPATCH`（MM）/ `CLIENT FLOW`（Sales），点击直接装填票据 |
+| 4 | 分辨率 | 桌面优先 1280+，1080 以下横向滚动，不做移动端 |
+| 5 | 原型 | 直接做**可运行骨架**（React + Vite）替代静态 HTML |
+
+技术偏差（相对 §7 建议）：
+
+- 不使用 Tailwind / Zustand / TanStack Table / lightweight-charts，改为**纯 CSS 变量 + 原生 table + 手写 SVG 图表**；运行期依赖仅 `react`、`react-dom`，后续接引擎时再按需引入。
+- 评分维度首版取 6 个：Returns、Discipline、Reaction、Resilience、Trade management、Adaptability。
+
+P0 已交付：
+
+- **入口** `src/screens/RoleSelect.tsx`：Sales / Market Maker 两张独立入口卡，选完进入主界面，主界面可 `EXIT DESK` 返回。
+- **主界面** `src/screens/Terminal.tsx`：顶栏 P&L 条 + 三栏 8 面板 + 底部状态栏 + 评分抽屉。
+- **组件**：`TopBar`、`MarketWatch`、`BookPanel`、`DispatchPanel`、`TradeTicket`（双角色同一组件）、`ChartPanel`、`PositionsPanel`、`EventFeed`、`ScoreDrawer`、`StatusBar`、`PanelHeader`。
+- **测试** `src/test/app.test.tsx`：角色入口、票据切换、派单装填、评分抽屉显隐、下单/报价确认、BOOK Tab 切换。
