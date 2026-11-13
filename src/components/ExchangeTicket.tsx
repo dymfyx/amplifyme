@@ -3,6 +3,8 @@ import type { Book, Instrument, Role, Side } from '../types'
 import {
   exchangeLiquidity,
   type ExchangeTradeInput,
+  type LimitOrderInput,
+  type RestingOrder,
   type VenuePricePreview,
 } from '../engine/simulation'
 import type { DifficultyTier } from '../engine/difficulty'
@@ -23,17 +25,27 @@ interface ExchangeTicketProps {
   tier: DifficultyTier
   /** 当前标的的净持仓（用来判断减仓/做空权限） */
   netQty: number
+  /** 自己还挂着的限价单 */
+  workingOrders: RestingOrder[]
   /** 返回结果文案，显示在票据下方 */
   onTrade: (input: ExchangeTradeInput) => string
+  /** 挂一张限价单 */
+  onPlaceLimit: (input: LimitOrderInput) => string
+  /** 撤掉一张挂单 */
+  onCancelOrder: (orderId: string) => string
 }
 
+type OrderType = 'market' | 'limit'
+
 /**
- * 交易所（主动成交）票据：两个角色都能随时自由买卖，但拿到的价不同。
+ * 交易所票据：两个角色都能随时自由买卖，但拿到的价不同。
  *
  * - MARKET MAKER：提供流动性，双边价更紧（gap ≈ 1–2 个价格点）；
  * - SALES：主动吃单边价，双边价更宽（gap ≈ 5–10 个价格点，随波动变化）。
  *
- * 票据上直接显示「你买 / 你卖 / 你的价差 / 来回成本」，让成本可见。
+ * 两种下单方式：
+ * - MARKET：立刻吃盘口（付价差 + 冲击）；
+ * - LIMIT：挂在价格上等市场来成交，可以部分成交、随时撤单。
  */
 export default function ExchangeTicket({
   instrument,
@@ -43,21 +55,28 @@ export default function ExchangeTicket({
   preview,
   tier,
   netQty,
+  workingOrders,
   onTrade,
+  onPlaceLimit,
+  onCancelOrder,
 }: ExchangeTicketProps) {
   const t = useT()
   const [side, setSide] = useState<Side>('BUY')
   const [qty, setQty] = useState('1000')
+  const [orderType, setOrderType] = useState<OrderType>('market')
+  const [limitPrice, setLimitPrice] = useState(() => instrument.last.toFixed(2))
   const [flash, setFlash] = useState<string | null>(null)
 
   const requested = Math.trunc(Number(qty) || 0)
+  const limit = Number(limitPrice)
   const levels = side === 'BUY' ? book.asks : book.bids
   const liquidity = exchangeLiquidity(levels)
   const price = side === 'BUY' ? preview.buy : preview.sell
-  const notional = requested > 0 && price > 0 ? requested * price : 0
+  const fillPrice = orderType === 'limit' ? limit : price
+  const notional = requested > 0 && fillPrice > 0 ? requested * fillPrice : 0
   const commission = notional * tier.commissionRate
   const roundTrip = preview.gapPoints * Math.max(0, requested) + commission * 2
-  /* 单笔上限由档位决定；盘口可成交量也要够，否则点下去只会拿到拒单 */
+  /* 单笔上限由档位决定 */
   const capHit = requested > tier.maxExchangeQty
   /* 权限：reduce-only 档只能减仓；不允许做空时卖出量不能超过持仓 */
   const reduces = side === 'BUY' ? netQty < 0 : netQty > 0
@@ -69,7 +88,7 @@ export default function ExchangeTicket({
    * 不把按钮锁死：点下去让引擎把拒绝原因说出来（限额 / 权限 / 盘口不够），
    * 否则用户只看到一颗灰色按钮，不知道是坏了还是不能做。
    */
-  const ready = requested > 0 && price > 0
+  const ready = requested > 0 && fillPrice > 0
   const blockedReason = mandateBlocked
     ? tier.exchangeMode === 'reduce-only'
       ? t('EXCHANGE LIMIT · this mandate only lets the desk reduce risk on the exchange')
@@ -78,7 +97,7 @@ export default function ExchangeTicket({
       ? t('This mandate caps a single order at {n} shares', {
           n: tier.maxExchangeQty.toLocaleString('en-US'),
         })
-      : requested > liquidity
+      : orderType === 'market' && requested > liquidity
         ? t('Only {n} {symbol} on this side of the book', {
             n: liquidity.toLocaleString('en-US'),
             symbol: instrument.symbol,
@@ -94,8 +113,17 @@ export default function ExchangeTicket({
       setFlash(blockedReason)
       return
     }
-    setFlash(onTrade({ symbol: instrument.symbol, side, qty: requested }))
+    setFlash(
+      orderType === 'limit'
+        ? onPlaceLimit({ symbol: instrument.symbol, side, qty: requested, limit })
+        : onTrade({ symbol: instrument.symbol, side, qty: requested }),
+    )
   }
+
+  const actionLabel =
+    orderType === 'limit'
+      ? t(side === 'BUY' ? 'PLACE BID' : 'PLACE OFFER')
+      : t(side === 'BUY' ? 'BUY AT MARKET' : 'SELL AT MARKET')
 
   return (
     <section className="panel panel--exchange">
@@ -117,6 +145,24 @@ export default function ExchangeTicket({
       />
 
       <div className="ticket exchange">
+        <div className="exchange__mode">
+          <span className="field__label">{t('Order type')}</span>
+          <div className="segmented" role="group" aria-label={t('Order type')}>
+            {(['market', 'limit'] as OrderType[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={orderType === option ? 'segmented__btn segmented__btn--on' : 'segmented__btn'}
+                aria-pressed={orderType === option}
+                aria-label={t(option === 'market' ? 'Market order' : 'Limit order')}
+                onClick={() => setOrderType(option)}
+              >
+                {t(option === 'market' ? 'MARKET' : 'LIMIT')}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="ticket__grid">
           <div className="field">
             <span className="field__label">{t('Exchange side')}</span>
@@ -150,27 +196,53 @@ export default function ExchangeTicket({
             />
           </label>
 
-          <label className="field">
-            <span className="field__label">{t('You buy at')}</span>
-            <input
-              className="field__input"
-              value={preview.buy > 0 ? preview.buy.toFixed(2) : '—'}
-              readOnly
-              tabIndex={-1}
-              aria-label={t('You buy at')}
-            />
-          </label>
+          {orderType === 'limit' ? (
+            <label className="field">
+              <span className="field__label">{t('Limit price')}</span>
+              <input
+                className="field__input"
+                inputMode="decimal"
+                aria-label={t('Limit price')}
+                value={limitPrice}
+                onChange={(event) => setLimitPrice(event.target.value)}
+              />
+            </label>
+          ) : (
+            <label className="field">
+              <span className="field__label">{t('You buy at')}</span>
+              <input
+                className="field__input"
+                value={preview.buy > 0 ? preview.buy.toFixed(2) : '—'}
+                readOnly
+                tabIndex={-1}
+                aria-label={t('You buy at')}
+              />
+            </label>
+          )}
 
-          <label className="field">
-            <span className="field__label">{t('You sell at')}</span>
-            <input
-              className="field__input"
-              value={preview.sell > 0 ? preview.sell.toFixed(2) : '—'}
-              readOnly
-              tabIndex={-1}
-              aria-label={t('You sell at')}
-            />
-          </label>
+          {orderType === 'market' ? (
+            <label className="field">
+              <span className="field__label">{t('You sell at')}</span>
+              <input
+                className="field__input"
+                value={preview.sell > 0 ? preview.sell.toFixed(2) : '—'}
+                readOnly
+                tabIndex={-1}
+                aria-label={t('You sell at')}
+              />
+            </label>
+          ) : (
+            <div className="field">
+              <span className="field__label">{t('Working price')}</span>
+              <input
+                className="field__input"
+                value={limit > 0 ? limit.toFixed(2) : '—'}
+                readOnly
+                tabIndex={-1}
+                aria-label={t('Working price')}
+              />
+            </div>
+          )}
         </div>
 
         {blockedReason ? (
@@ -204,10 +276,32 @@ export default function ExchangeTicket({
           </div>
           <div className="ticket__actions">
             <button type="button" className="btn btn--primary" onClick={submit} disabled={!ready}>
-              {t(side === 'BUY' ? 'BUY AT MARKET' : 'SELL AT MARKET')}
+              {actionLabel}
             </button>
           </div>
         </div>
+
+        {workingOrders.length > 0 ? (
+          <div className="exchange__orders">
+            <span className="field__label">{t('WORKING ORDERS')}</span>
+            {workingOrders.map((order) => (
+              <div key={order.id} className="exchange__order">
+                <span className={order.side === 'BUY' ? 'cell-up' : 'cell-down'}>
+                  {t(order.side)} {order.remaining.toLocaleString('en-US')}/{order.qty.toLocaleString('en-US')}{' '}
+                  {order.symbol} @ {order.limit.toFixed(2)}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn--tiny"
+                  aria-label={t('Cancel {id}', { id: order.id })}
+                  onClick={() => setFlash(onCancelOrder(order.id))}
+                >
+                  {t('Cancel')}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {visibleFlash ? (
           <p

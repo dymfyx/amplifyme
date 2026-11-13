@@ -671,3 +671,55 @@ describe('difficulty persistence', () => {
     expect(saved.tier).toBe(3)
   })
 })
+describe('limit orders and the practice loop', () => {
+  it('exports the session as a ghost and compares it side by side', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'EXPORT GHOST' }))
+    fireEvent.click(screen.getByRole('button', { name: 'COMPARE GHOST' }))
+    expect(screen.getByRole('dialog', { name: 'Ghost compare' })).toBeInTheDocument()
+    expect(screen.getByText('GHOST DECISIONS')).toBeInTheDocument()
+  })
+
+  it('rests a limit order on the book and lets the desk cancel it', () => {
+    openDesk('Sales')
+    fireEvent.click(screen.getByRole('button', { name: 'Limit order' }))
+    fireEvent.change(screen.getByLabelText('Limit price'), { target: { value: '700' } })
+    fireEvent.click(screen.getByRole('button', { name: 'PLACE BID' }))
+    expect(screen.getByText(/ORDER WORKING · BUY 1,000 AZN @ 700/)).toBeInTheDocument()
+    expect(screen.getByText('WORKING ORDERS')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel LIM-/ }))
+    expect(screen.getByText(/ORDER CANCELLED/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Cancel LIM-/ })).not.toBeInTheDocument()
+  })
+
+  it('shows the opening goals before the desk opens', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Sales' }))
+    expect(screen.getByTestId('setup-goals')).toBeInTheDocument()
+    expect(screen.getByText('SESSION GOALS')).toBeInTheDocument()
+    expect(screen.getByText('Dealer fills')).toBeInTheDocument()
+  })
+
+  it('scores the session goals and splits the p&l at settlement', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    expect(screen.getByTestId('report-goals')).toBeInTheDocument()
+    expect(screen.getByTestId('report-attribution')).toBeInTheDocument()
+    expect(screen.getByText('P&L ATTRIBUTION')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'EXPORT GHOST' })).toBeInTheDocument()
+  })
+
+  it('opens the cross-session progress drawer from the entry screen', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'PROGRESS' }))
+    expect(screen.getByRole('dialog', { name: 'Training progress' })).toBeInTheDocument()
+  })
+})

@@ -41,6 +41,8 @@ export interface ArchivedSession {
   adverse: number
   missed: number
   worstDrawdown: number
+  /** 本局行为标签（旧存档没有这个字段） */
+  tags?: string[]
 }
 
 export interface ArchiveSettings {
@@ -259,6 +261,9 @@ const validateSession = (value: unknown, index: number): SessionResult => {
       adverse: value.adverse as number,
       missed: value.missed as number,
       worstDrawdown: value.worstDrawdown as number,
+      tags: Array.isArray(value.tags)
+        ? value.tags.filter((tag): tag is string => typeof tag === 'string')
+        : undefined,
     },
   }
 }

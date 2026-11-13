@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { ScoreCard } from '../types'
 import type { DecisionReview, SettlementStats } from '../engine/scoring'
 import type { SessionVerdict } from '../engine/evaluation'
+import { formatGoalValue, type GoalStatus } from '../engine/goals'
 import { STARTING_CASH } from '../engine/simulation'
 import { useT } from '../i18n'
 import DrillVerdict from './DrillVerdict'
@@ -18,6 +19,14 @@ interface SettlementReportProps {
   verdict: SessionVerdict
   /** 本局难度档位名（显示在评价卡角上） */
   tierName: string
+  /** 开局目标卡的结算结果 */
+  goals: GoalStatus[]
+  /** 导出这一局给队友做同题对比 */
+  onExportGhost?: () => void
+  /** 打开同题对比抽屉 */
+  onCompareGhost?: () => void
+  /** 是否已经有可对比的影子 */
+  hasGhost?: boolean
   scenarioName: string
   /** 训练模式：结算时插一张 drill 判定卡 */
   drill?: Drill | null
@@ -56,6 +65,10 @@ export default function SettlementReport({
   review,
   verdict,
   tierName,
+  goals,
+  onExportGhost,
+  onCompareGhost,
+  hasGhost = false,
   scenarioName,
   drill = null,
   drillProgress = null,
@@ -186,6 +199,59 @@ export default function SettlementReport({
             ))}
           </div>
           <p className="report__verdict-note">{t(verdict.line)}</p>
+        </div>
+
+        <div className="report__grid report__grid--closures">
+          <article className="report__card" data-testid="report-goals">
+            <h3 className="report__card-title">{t('SESSION GOALS')}</h3>
+            <ul className="report__goals">
+              {goals.map((goal) => (
+                <li key={goal.id} className={goal.ok ? 'report__goal report__goal--ok' : 'report__goal'}>
+                  <span className="report__goal-mark">{goal.ok ? '✓' : '✗'}</span>
+                  <span className="report__goal-label">
+                    {t(goal.label)}
+                    <span className="report__goal-hint">{t(goal.hint)}</span>
+                  </span>
+                  <span className="report__goal-value">
+                    {formatGoalValue(goal.current, goal.unit)} · {goal.compare === 'gte' ? '≥' : '≤'}{' '}
+                    {formatGoalValue(goal.target, goal.unit)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="report__card" data-testid="report-attribution">
+            <h3 className="report__card-title">{t('P&L ATTRIBUTION')}</h3>
+            <dl className="report__rows">
+              <div>
+                <dt>{t('Client spread')}</dt>
+                <dd className={stats.clientEdge < 0 ? 'num--down' : 'num--up'}>
+                  {signedMoney(stats.clientEdge)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('Taker cost (spread + impact)')}</dt>
+                <dd className={stats.takerEdge < 0 ? 'num--down' : 'num--up'}>
+                  {signedMoney(stats.takerEdge)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('Commission')}</dt>
+                <dd className="num--down">{signedMoney(-stats.commission)}</dd>
+              </div>
+              <div>
+                <dt>{t('Inventory & drift')}</dt>
+                <dd className={stats.attributionResidual < 0 ? 'num--down' : 'num--up'}>
+                  {signedMoney(stats.attributionResidual)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('TOTAL P&L')}</dt>
+                <dd className={stats.total < 0 ? 'num--down' : 'num--up'}>{signedMoney(stats.total)}</dd>
+              </div>
+            </dl>
+          </article>
         </div>
 
         <div className="report__grid">
@@ -378,6 +444,16 @@ export default function SettlementReport({
 
 
         <div className="report__actions">
+          {onExportGhost ? (
+            <button type="button" className="btn btn--ghost" onClick={onExportGhost}>
+              {t('EXPORT GHOST')}
+            </button>
+          ) : null}
+          {onCompareGhost ? (
+            <button type="button" className="btn btn--ghost" onClick={onCompareGhost}>
+              {t(hasGhost ? 'COMPARE GHOST' : 'IMPORT GHOST')}
+            </button>
+          ) : null}
           <button type="button" className="btn btn--primary" onClick={onRestart}>
             {t('RUN ANOTHER SESSION')}
           </button>

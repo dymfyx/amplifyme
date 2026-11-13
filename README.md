@@ -488,3 +488,22 @@ Risk limits reject new risk: `RISK LIMIT · AZN net exposure would exceed $10m`.
 Scoring itself never changes with the tier (no difficulty coefficient). What changes is the closing note: `SESSION VERDICT` under the benchmark shows the band (`elite / strong / solid / snark / brutal` from the composite), up to six behaviour tags picked from what actually happened (`Decisive`, `Patient`, `Chasing the tape`, `Steady book`, `Holding losers`, `Overtrading`, `Headline hunter`, `Contrarian`) and one line of feedback. Below 60 the tone turns snarky; it only ever describes this session's decisions, never the person.
 
 Training drills pin their own tier (most are tier 2, `Adverse selection` is tier 3), so a pass is a comparable pass.
+### Limit orders on the exchange
+
+Panel 5 has two order types. `MARKET` takes liquidity at the quoted taker price; `LIMIT` posts a resting order instead:
+
+- `PLACE BID` / `PLACE OFFER` parks the order at your limit (within 20% of the last price, otherwise `LIMIT REJECTED · keep the limit within 20% of the market`).
+- A resting order fills when the tape crosses it (`last <= bid` for buys, `last >= offer` for sells), taking the better of limit and market, and it can fill in pieces across several ticks — the working order shows `filled/quoted` and what is left keeps waiting.
+- `WORKING ORDERS` under the ticket lists live orders with a `Cancel` button (`ORDER CANCELLED`); filled or cancelled orders stay in `BOOK · ORDERS` with their final status.
+- The same mandate rules apply: single-order cap, `REDUCE ONLY`, `NO SHORTING`, cash and risk limits.
+
+Dealer quotes on the sales desk also live longer: a callback is good for 24–40 ticks at the base tier (roughly 6–10 seconds at 1x), scaled by the tier.
+
+### Practice loop: goals, attribution, progress, ghosts
+
+Four small loops that turn a session into practice rather than a one-off game:
+
+1. **Opening goals** — the setup screen lists 3–4 concrete targets for the session (`SESSION GOALS`). Goals never change the score; they just say what to watch.
+2. **Settlement goals + P&L attribution** — the report ticks every goal (✓/✗ with current vs target) and splits the total into `Client spread`, `Taker cost (spread + impact)`, `Commission` and `Inventory & drift`, ending on `TOTAL P&L`.
+3. **Progress drawer** — `PROGRESS` on the entry screen aggregates the local archive: session count, average score, average alpha, beat-the-benchmark rate, a trend line of the last 20 composites, breakdowns by desk / scenario / tier, and the most common weakness tags.
+4. **Ghost compare** — `EXPORT GHOST` downloads the session as a small JSON (summary + decision timeline). `IMPORT GHOST` loads a teammate's file into the `GHOST REPLAY` drawer and puts your numbers next to theirs (score, percentile, alpha, total, trades) with a delta column and their decision log. Clearing the ghost is `CLEAR GHOST`.

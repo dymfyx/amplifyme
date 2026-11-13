@@ -6,6 +6,8 @@ import './styles/scenario.css'
 import './styles/replay.css'
 import './styles/archive.css'
 import './styles/train.css'
+import './styles/progress.css'
+import './styles/ghost.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

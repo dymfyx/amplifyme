@@ -668,4 +668,10 @@ P0 已交付：
 
 ### 测试
 
-`src/engine/difficulty.test.ts`（档位数量/递增/基准档/权限/合法性/band 边界/命名）、`src/engine/evaluation.test.ts`（兜底标签、snark 语气、patient/overtrading/chaser/headline-hunter 触发、去重上限）、`src/test/app.test.tsx` 新增 4 例（入口 8 个难度 chip、选档进台面、`&tier=4` 深链、结算 `SESSION VERDICT`）。全量 **241 例**。
+`src/engine/difficulty.test.ts`（档位数量/递增/基准档/权限/合法性/band 边界/命名）、`src/engine/evaluation.test.ts`（兜底标签、snark 语气、patient/overtrading/chaser/headline-hunter 触发、去重上限）、`src/test/app.test.tsx` 新增 4 例（入口 8 个难度 chip、选档进台面、`&tier=4` 深链、结算 `SESSION VERDICT`）。全量 **241 例**。## 25. 限价挂单与练习闭环（P2.17）
+
+- 交易所票据增加 `MARKET` / `LIMIT` 两种订单：限价单挂到盘口，价格穿过即成交（可取 limit 与市价的较好者），可跨 tick 分笔成交，`WORKING ORDERS` 里可撤单；偏离最近价 20% 以上被拒（`LIMIT REJECTED`），tier 的单笔上限 / reduce-only / 禁做空 / 现金与风控限额同样适用。
+- dealer 回价有效期从 8–16 tick 延长到 24–40 tick（乘 tier 的 `dealerValidityMult`），解决「回价刚出来就过期、看起来像没人接盘」。
+- 结算与结算卡：`src/engine/goals.ts` 按台面给 3–4 条开局目标（不参与评分），`src/engine/scoring.ts` 新增 `clientEdge / takerEdge / attributionResidual`，报告新增 `SESSION GOALS` 与 `P&L ATTRIBUTION` 两张卡。
+- `ProgressDrawer`（跨局趋势：近 20 局 composite、按台面/剧本/档位分组、最常见弱点标签）与 `GhostDrawer`（导出/导入单局 JSON、YOURS/GHOST/DELTA 对比、影子决策时间轴）由子代理实现，Lead 负责接入 `App` / `Terminal`、i18n（`zh-progress` / `zh-ghost` / `zh-closures`）与样式。
+- 测试：`src/engine/resting.test.ts`（5 例）、`src/engine/goals.test.ts`（6 例）、app 练习闭环用例（限价挂单/撤单、目标卡、结算目标与归因、进度抽屉、ghost 导出对比）；全量见 README 测试数。

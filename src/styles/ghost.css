@@ -1,0 +1,328 @@
+/* 影子对比抽屉（GhostDrawer）。所有选择器都以 .ghost 开头，避免影响主界面。 */
+
+/* 遮罩：复用 styles.css 的 .drawer-backdrop 布局，这里只调层级 */
+.ghost-backdrop {
+  z-index: 75;
+}
+
+/* 面板：复用 .drawer 的右侧抽屉布局，表格需要更宽一点 */
+.ghost-drawer {
+  width: min(480px, 96vw);
+}
+
+.ghost__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.ghost__hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.ghost__input {
+  width: 100%;
+  min-height: 150px;
+  padding: 10px 11px;
+  resize: vertical;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.ghost__input::placeholder {
+  color: var(--text-2);
+  opacity: 0.72;
+}
+
+.ghost__input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.ghost__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ghost__file {
+  flex: 1 1 190px;
+  min-width: 0;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.ghost__file::file-selector-button {
+  margin-right: 8px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.ghost__file::file-selector-button:hover {
+  border-color: var(--accent);
+}
+
+.ghost__btn {
+  margin-left: auto;
+}
+
+.ghost__error {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(255, 92, 108, 0.08);
+  border: 1px solid rgba(255, 92, 108, 0.45);
+  border-radius: 3px;
+  color: var(--down);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+/* 会话摘要：台面 · 剧本 · 档位 · 时长 · 种子 */
+.ghost__summary {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-1);
+  font-size: 10.5px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
+
+/* 对比表 */
+.ghost__caption {
+  padding: 0;
+  color: var(--text-2);
+  font-size: 0;
+}
+
+.ghost-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.ghost-table__corner {
+  width: 34%;
+}
+
+.ghost-table__head {
+  padding: 0 8px 6px;
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-align: right;
+}
+
+.ghost-table__corner {
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ghost-table__head {
+  border-bottom: 1px solid var(--line);
+}
+
+.ghost-table__label {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ghost-table__value {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-1);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ghost-table tr:last-child .ghost-table__label,
+.ghost-table tr:last-child .ghost-table__value {
+  border-bottom: 0;
+}
+
+.ghost-delta {
+  font-weight: 600;
+}
+
+.ghost-delta--up {
+  color: var(--up);
+}
+
+.ghost-delta--down {
+  color: var(--down);
+}
+
+.ghost-delta--flat {
+  color: var(--text-2);
+}
+
+.ghost-delta--neutral {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+/* 标签与决策分区 */
+.ghost__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.ghost__section-title {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.ghost-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ghost-tag {
+  padding: 3px 8px;
+  background: rgba(76, 141, 255, 0.1);
+  border: 1px solid rgba(76, 141, 255, 0.35);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+}
+
+.ghost__empty {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.ghost-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.ghost-decision {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 10.5px;
+}
+
+.ghost-decision__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.ghost-decision__badge {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--text-2);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+}
+
+.ghost-decision__badge--quote {
+  border-color: rgba(76, 141, 255, 0.4);
+  color: var(--accent);
+}
+
+.ghost-decision__badge--fill {
+  border-color: rgba(46, 204, 143, 0.4);
+  color: var(--up);
+}
+
+.ghost-decision__badge--decline {
+  border-color: rgba(255, 92, 108, 0.4);
+  color: var(--down);
+}
+
+.ghost-decision__label {
+  color: var(--text-1);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.ghost-decision__detail {
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.ghost__more {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+}
+
+/* 底部动作 */
+.ghost__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ghost__footer .ghost__btn {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+@media (max-width: 520px) {
+  .ghost-drawer {
+    width: 100vw;
+  }
+}

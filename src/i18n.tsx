@@ -8,6 +8,9 @@ import { zhPanels } from './i18n/zh-panels'
 import { zhReplay } from './i18n/zh-replay'
 import { zhScenario } from './i18n/zh-scenario'
 import { zhTrain } from './i18n/zh-train'
+import { zhClosures } from './i18n/zh-closures'
+import { zhProgress } from './i18n/zh-progress'
+import { zhGhost } from './i18n/zh-ghost'
 
 export type Language = 'en' | 'zh'
 
@@ -29,6 +32,9 @@ const ZH: Record<string, string> = {
   ...zhScenario,
   ...zhReplay,
   ...zhAgents,
+  ...zhClosures,
+  ...zhProgress,
+  ...zhGhost,
   ...zhEval,
 }
 

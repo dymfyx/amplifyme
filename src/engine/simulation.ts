@@ -293,7 +293,14 @@ export interface SimulationState {
   /** 可用资金（买入扣钱、卖出加钱），不能为负 */
   cash: number
   nextDispatchAt: number
-  counters: { rfq: number; quote: number; order: number; trade: number; dealerQuote: number }
+  counters: {
+    rfq: number
+    quote: number
+    order: number
+    trade: number
+    dealerQuote: number
+    resting: number
+  }
   /** 决策遥测：报价/成交/回撤/新闻响应，评分与结算报告的数据源 */
   telemetry: Telemetry
   /** 这一局的剧本（场景库或自定义 JSON） */
@@ -311,6 +318,8 @@ export interface SimulationState {
   role: Role
   /** Sales 向 dealer 发出的问价与收到的回价（P2.13） */
   dealerQuotes: DealerQuote[]
+  /** 交易所限价挂单（P2.17）：挂在价格上等成交 */
+  restingOrders: RestingOrder[]
   /** 这一局选择的难度档位（P2.14），参数见 difficulty.ts 的预设表 */
   tier: DifficultyTier
   /** 本局每边佣金（由难度档位决定，基准 5bps） */
@@ -340,6 +349,23 @@ export interface DealerQuote {
   readyAt: number
   /** 回价过期 tick */
   expiresAt: number
+}
+
+/**
+ * 交易所限价挂单：挂在价格上等别人来成交，而不是主动吃盘口。
+ * 价格穿过挂单价之后按每帧的市场成交量逐笔成交，可以部分成交、可以撤单。
+ */
+export interface RestingOrder {
+  id: string
+  /** 对应的 ORDER 行 id，面板里显示 WORKING / FILLED / CANCELLED */
+  orderId: string
+  symbol: string
+  side: Side
+  qty: number
+  remaining: number
+  limit: number
+  tick: number
+  status: 'WORKING' | 'FILLED' | 'CANCELLED'
 }
 
 /** 回放用的一帧：时间和五个名字的最新价 */
@@ -585,7 +611,7 @@ export function createSession(
     commission: 0,
     cash: STARTING_CASH,
     nextDispatchAt: START_SECONDS + 900,
-    counters: { rfq: 201, quote: 118, order: 1043, trade: 8841, dealerQuote: 0 },
+    counters: { rfq: 201, quote: 118, order: 1043, trade: 8841, dealerQuote: 0, resting: 0 },
     telemetry: recordRfq(createTelemetry()),
     scenario,
     clients: DEFAULT_CLIENTS,
@@ -601,6 +627,7 @@ export function createSession(
     agents,
     role,
     dealerQuotes: [],
+    restingOrders: [],
     tier,
     commissionRate: tier.commissionRate,
     declines: 0,
@@ -1282,6 +1309,101 @@ export function stepSession(state: SimulationState): SimulationState {
     quotes.push(next)
   }
 
+  /* 3b. 交易所限价挂单：价格穿过挂单价后，吃这一帧的市场流量成交（可部分成交、可撤单） */
+  let restingOrders = state.restingOrders
+  if (restingOrders.some((order) => order.status === 'WORKING')) {
+    const updatedResting: RestingOrder[] = []
+    for (const resting of restingOrders) {
+      if (resting.status !== 'WORKING' || resting.remaining <= 0) {
+        updatedResting.push(resting)
+        continue
+      }
+      const instrument = instruments.find((candidate) => candidate.symbol === resting.symbol)
+      if (!instrument) {
+        updatedResting.push({ ...resting, status: 'CANCELLED', remaining: 0 })
+        continue
+      }
+      const crossed =
+        resting.side === 'BUY' ? instrument.last <= resting.limit : instrument.last >= resting.limit
+      if (!crossed) {
+        updatedResting.push(resting)
+        continue
+      }
+      const [flowRoll, afterFlow] = nextRandom(rng)
+      rng = afterFlow
+      /* 这一帧有多少自然流量能在挂单价上成交 */
+      const marketFlow = Math.max(
+        100,
+        Math.round(instrument.bookSize * (QUEUE_FLOW_MIN + flowRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN))),
+      )
+      const price =
+        resting.side === 'BUY' ? Math.min(resting.limit, instrument.last) : Math.max(resting.limit, instrument.last)
+      const affordable =
+        resting.side === 'BUY'
+          ? Math.floor(cash / (price * (1 + state.commissionRate)))
+          : resting.remaining
+      const fillQty = Math.min(resting.remaining, marketFlow, affordable)
+      if (fillQty < 1) {
+        updatedResting.push(resting)
+        continue
+      }
+      const gross = round2(price * fillQty)
+      const fee = round2(gross * state.commissionRate)
+      const fillMid = bookMid(instrument.book)
+      instruments = applyFillImpact(instruments, resting.symbol, resting.side, gross, tick)
+      positions = applyPositionFill(positions, resting.symbol, resting.side, fillQty, price)
+      cash = round2(cash + (resting.side === 'BUY' ? -(gross + fee) : gross - fee))
+      commission = round2(commission + fee)
+      counters = { ...counters, trade: counters.trade + 1, order: counters.order + 1 }
+      const tradeRow: TradeRow = {
+        id: `TRD-${counters.trade}`,
+        time: formatShortTime(simSeconds),
+        symbol: resting.symbol,
+        side: resting.side,
+        qty: fillQty,
+        price: round2(price),
+        fee,
+        venue: 'exchange',
+      }
+      trades = [tradeRow, ...trades].slice(0, 20)
+      const remaining = resting.remaining - fillQty
+      const status: RestingOrder['status'] = remaining > 0 ? 'WORKING' : 'FILLED'
+      const orderIndex = orders.findIndex((order) => order.id === resting.orderId)
+      if (orderIndex === -1) {
+        const orderRow: OrderRow = {
+          id: resting.orderId,
+          time: formatShortTime(simSeconds),
+          symbol: resting.symbol,
+          side: resting.side,
+          qty: remaining,
+          price: resting.limit,
+          status,
+          venue: 'exchange',
+        }
+        orders = [orderRow, ...orders].slice(0, 30)
+      } else {
+        orders = orders.map((order, index) =>
+          index === orderIndex ? { ...order, qty: remaining, status } : order,
+        )
+      }
+      telemetry = recordFill(telemetry, {
+        id: tradeRow.id,
+        symbol: resting.symbol,
+        side: resting.side,
+        qty: fillQty,
+        price: round2(price),
+        mid: fillMid,
+        edge: round2(resting.side === 'BUY' ? fillMid - price : price - fillMid),
+        notional: gross,
+        fee,
+        tick,
+        venue: 'exchange',
+      })
+      updatedResting.push({ ...resting, remaining, status })
+    }
+    restingOrders = updatedResting
+  }
+
   /* 4. 系统派单：过期清理 + 新单到达；头条刚出时消息灵通的客户会扎堆来做方向 */
   dispatch = dispatch.filter((item) => {
     const profile = state.clients.find((candidate) => candidate.id === item.client)
@@ -1410,6 +1532,7 @@ export function stepSession(state: SimulationState): SimulationState {
     history,
     agents,
     dealerQuotes,
+    restingOrders,
     drainUntilTick: drainUntilTick > tick ? drainUntilTick : 0,
   }
 }
@@ -1798,6 +1921,124 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
 }
 
 /* ------------------------------------------------------------------ */
+/* 交易所限价挂单：挂在价格上等市场来成交（P2.17）                    */
+/* ------------------------------------------------------------------ */
+
+export interface LimitOrderInput {
+  symbol: string
+  side: Side
+  qty: number
+  limit: number
+}
+
+/**
+ * 挂一张限价单到交易所。和市价单不同，单子不会立刻成交：
+ * 价格穿过挂单价之后，每帧按市场流量逐笔成交，可以部分成交，也可以撤单。
+ */
+export function placeLimitOrder(state: SimulationState, input: LimitOrderInput): ActionResult {
+  const qty = Math.trunc(input.qty)
+  if (!(qty > 0)) return { state, message: 'LIMIT REJECTED · quantity must be positive' }
+
+  const instrument = state.instruments.find((item) => item.symbol === input.symbol)
+  if (!instrument) return { state, message: 'LIMIT REJECTED · unknown instrument' }
+  if (!(input.limit > 0)) return { state, message: 'LIMIT REJECTED · limit price must be positive' }
+  if (Math.abs(input.limit - instrument.last) / instrument.last > 0.2) {
+    return { state, message: 'LIMIT REJECTED · keep the limit within 20% of the market' }
+  }
+
+  const tier = tierOf(state)
+  if (qty > tier.maxExchangeQty) {
+    return {
+      state,
+      message: `EXCHANGE LIMIT · this mandate caps a single order at ${tier.maxExchangeQty.toLocaleString(
+        'en-US',
+      )} shares`,
+    }
+  }
+  const heldQty = state.positions.find((position) => position.symbol === input.symbol)?.netQty ?? 0
+  if (state.role === 'sales' && !tier.allowShort && input.side === 'SELL' && heldQty < qty) {
+    return { state, message: 'NO SHORTING · retail accounts can only sell what they already hold' }
+  }
+  const reducesRisk = input.side === 'BUY' ? heldQty < 0 : heldQty > 0
+  if (tier.exchangeMode === 'reduce-only' && !reducesRisk) {
+    return {
+      state,
+      message: 'EXCHANGE LIMIT · this mandate only lets the desk reduce risk on the exchange',
+    }
+  }
+  const gross = qty * input.limit
+  const fee = round2(gross * commissionOf(state))
+  if (input.side === 'BUY' && gross + fee > state.cash) {
+    const need = Math.ceil(gross + fee).toLocaleString('en-US')
+    const have = Math.floor(state.cash).toLocaleString('en-US')
+    return { state, message: `LIMIT REJECTED · insufficient cash (need ${need}, have ${have})` }
+  }
+  const riskBreach = riskLimitBreach(state, input.symbol, input.side, qty, input.limit)
+  if (riskBreach) return { state, message: riskBreach }
+
+  const counters = {
+    ...state.counters,
+    order: state.counters.order + 1,
+    resting: state.counters.resting + 1,
+  }
+  const orderId = `ORD-${counters.order}`
+  const resting: RestingOrder = {
+    id: `LIM-${counters.resting}`,
+    orderId,
+    symbol: input.symbol,
+    side: input.side,
+    qty,
+    remaining: qty,
+    limit: round2(input.limit),
+    tick: state.tick,
+    status: 'WORKING',
+  }
+  const order: OrderRow = {
+    id: orderId,
+    time: formatShortTime(state.simSeconds),
+    symbol: input.symbol,
+    side: input.side,
+    qty,
+    price: resting.limit,
+    status: 'WORKING',
+    venue: 'exchange',
+  }
+  return {
+    state: {
+      ...state,
+      restingOrders: [...state.restingOrders, resting],
+      orders: [order, ...state.orders].slice(0, 30),
+      counters,
+    },
+    message: `ORDER WORKING · ${input.side} ${qty.toLocaleString('en-US')} ${input.symbol} @ ${resting.limit.toFixed(
+      2,
+    )}`,
+  }
+}
+
+export function cancelLimitOrder(state: SimulationState, orderId: string): ActionResult {
+  const resting = state.restingOrders.find((order) => order.id === orderId)
+  if (!resting) return { state, message: 'ORDER NOT FOUND' }
+  if (resting.status !== 'WORKING') return { state, message: 'ORDER ALREADY DONE' }
+  const restingOrders = state.restingOrders.map((order) =>
+    order.id === orderId ? { ...order, status: 'CANCELLED' as const, remaining: 0 } : order,
+  )
+  const orders = state.orders.map((order) =>
+    order.id === resting.orderId ? { ...order, status: 'CANCELLED' as const, qty: 0 } : order,
+  )
+  return {
+    state: { ...state, restingOrders, orders },
+    message: `ORDER CANCELLED · ${resting.side} ${resting.remaining.toLocaleString('en-US')} ${
+      resting.symbol
+    } @ ${resting.limit.toFixed(2)}`,
+  }
+}
+
+export function selectRestingOrders(state: SimulationState): RestingOrder[] {
+  return state.restingOrders.filter((order) => order.status === 'WORKING')
+}
+
+/* ------------------------------------------------------------------ */
 /* Sales 问价：向 dealer 要双边价，挑一家打或者放着等过期            */
 /* ------------------------------------------------------------------ */
 
@@ -1882,7 +2123,7 @@ export function requestDealerQuote(state: SimulationState, input: DealerRequestI
       offer,
       size,
       readyAt: state.tick + latency,
-      expiresAt: state.tick + latency + Math.round((8 + ttlRoll * 8) * tier.dealerValidityMult),
+      expiresAt: state.tick + latency + Math.round((24 + ttlRoll * 16) * tier.dealerValidityMult),
     })
   }
 

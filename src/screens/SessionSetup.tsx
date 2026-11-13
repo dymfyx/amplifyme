@@ -8,6 +8,7 @@ import {
   type SessionMinutes,
 } from '../engine/simulation'
 import { useT } from '../i18n'
+import { formatGoalValue, type SessionGoal } from '../engine/goals'
 
 type Mode = 'flat' | 'custom'
 
@@ -18,6 +19,8 @@ interface DraftRow {
 
 interface SessionSetupProps {
   role: Role
+  /** 开局目标卡：这一局要盯的 3–4 个目标（不参与评分） */
+  goals?: SessionGoal[]
   minutes?: SessionMinutes
   onStart: (openingBook: OpeningPosition[]) => void
   onBack: () => void
@@ -41,6 +44,7 @@ const emptyDrafts = (): Record<string, DraftRow> =>
 
 export default function SessionSetup({
   role,
+  goals = [],
   minutes = DEFAULT_MINUTES,
   onStart,
   onBack,
@@ -188,6 +192,27 @@ export default function SessionSetup({
             <span className="setup__stat-value">{money(STARTING_CASH)}</span>
           </div>
         </div>
+
+        {goals.length > 0 ? (
+          <div className="setup__goals" data-testid="setup-goals">
+            <span className="setup__stat-label">{t('SESSION GOALS')}</span>
+            <ul className="setup__goal-list">
+              {goals.map((goal) => (
+                <li key={goal.id} className="setup__goal">
+                  <span className="setup__goal-label">{t(goal.label)}</span>
+                  <span className="setup__goal-target">
+                    {goal.compare === 'gte'
+                      ? t('at least {value}', { value: formatGoalValue(goal.target, goal.unit) })
+                      : t('at most {value}', { value: formatGoalValue(goal.target, goal.unit) })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="setup__hint">
+              {t('Goals do not change the score — they just tell you what to watch this session.')}
+            </p>
+          </div>
+        ) : null}
 
         <p className="setup__hint setup__hint--wide">
           {t(

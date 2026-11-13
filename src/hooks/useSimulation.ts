@@ -12,10 +12,13 @@ import {
   tradeOnExchange,
   requestDealerQuote,
   hitDealerQuote,
+  placeLimitOrder,
+  cancelLimitOrder,
   type ActionResult,
   type DealerHitInput,
   type DealerRequestInput,
   type ExchangeTradeInput,
+  type LimitOrderInput,
   type FillInput,
   DEFAULT_MINUTES,
   type OpeningPosition,
@@ -36,6 +39,10 @@ export interface SimulationApi {
   requestDealerQuote: (input: DealerRequestInput) => string
   /** 打掉某家 dealer 的回价 */
   hitDealerQuote: (input: DealerHitInput) => string
+  /** 挂一张交易所限价单：挂在价格上等成交 */
+  placeLimitOrder: (input: LimitOrderInput) => string
+  /** 撤掉自己的挂单 */
+  cancelLimitOrder: (orderId: string) => string
   sendQuote: (input: QuoteInput) => string
   declineDispatch: (rfqId: string) => string
   togglePause: () => void
@@ -101,6 +108,8 @@ export function useSimulation(
       tradeOnExchange: (input) => run((current) => tradeOnExchange(current, input)),
       requestDealerQuote: (input) => run((current) => requestDealerQuote(current, input)),
       hitDealerQuote: (input) => run((current) => hitDealerQuote(current, input)),
+    placeLimitOrder: (input) => run((current) => placeLimitOrder(current, input)),
+    cancelLimitOrder: (orderId) => run((current) => cancelLimitOrder(current, orderId)),
       sendQuote: (input) => run((current) => sendQuote(current, input)),
       declineDispatch: (rfqId) => run((current) => declineDispatch(current, rfqId)),
       togglePause: () => commit(togglePause(latest.current)),

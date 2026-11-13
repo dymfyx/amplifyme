@@ -67,6 +67,8 @@ interface RoleSelectProps {
   /** 本地存档里已有多少条记录 */
   archiveCount: number
   onOpenArchive: () => void
+  /** 打开跨局趋势面板 */
+  onOpenProgress: () => void
   onSelect: (role: Role) => void
 }
 
@@ -85,6 +87,7 @@ export default function RoleSelect({
   onTier,
   archiveCount,
   onOpenArchive,
+  onOpenProgress,
   onSelect,
 }: RoleSelectProps) {
   const t = useT()
@@ -232,6 +235,9 @@ export default function RoleSelect({
           <span>{t('MODE · PRACTICE')}</span>
           <button type="button" className="role-select__archive" onClick={onOpenArchive}>
             {t('ARCHIVE ({count})', { count: archiveCount })}
+          </button>
+          <button type="button" className="role-select__archive" onClick={onOpenProgress}>
+            {t('PROGRESS')}
           </button>
           <a className="role-select__guide" href="./beginner-guide.pdf" target="_blank" rel="noreferrer">
             {t('BEGINNER GUIDE (PDF)')}

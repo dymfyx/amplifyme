@@ -70,6 +70,12 @@ export interface SettlementStats {
   alpha: number
   /** 是否跑赢基准 */
   beatsBenchmark: boolean
+  /** P&L 归因：客户流价差贡献（edge × qty 求和） */
+  clientEdge: number
+  /** P&L 归因：主动成交（dealer + exchange）的价差与冲击成本（通常为负） */
+  takerEdge: number
+  /** P&L 归因：剩下的持仓方向性损益（总盈亏 − 上面三项 + 佣金） */
+  attributionResidual: number
 }
 
 export function selectSettlement(state: SimulationState): SettlementStats {
@@ -92,6 +98,11 @@ export function selectSettlement(state: SimulationState): SettlementStats {
   const spreadCapture = Math.round(
     telemetry.fills.reduce((total, fill) => total + fill.edge * fill.qty, 0),
   )
+  /* P&L 归因：客户流赚的价差、主动吃单付的成本、剩下的持仓/漂移 */
+  const clientEdge = Math.round(clientFills.reduce((total, fill) => total + fill.edge * fill.qty, 0))
+  const takerEdge = Math.round(ownFills.reduce((total, fill) => total + fill.edge * fill.qty, 0))
+  const attributionResidual = Math.round(pnl.total - (clientEdge + takerEdge - pnl.commission))
+
   const spreadRatios = telemetry.quotes
     .filter((quote) => quote.marketSpread > 0)
     .map((quote) => quote.ourSpread / quote.marketSpread)
@@ -130,6 +141,9 @@ export function selectSettlement(state: SimulationState): SettlementStats {
     dealerNotional: Math.round(dealerNotional),
     entryEdgeBps,
     spreadCapture,
+    clientEdge,
+    takerEdge,
+    attributionResidual,
     ...benchmark(state),
   }
 }

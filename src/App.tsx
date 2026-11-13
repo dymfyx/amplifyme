@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { Role } from './types'
 import { ArchiveDrawer } from './components/ArchiveDrawer'
+import ProgressDrawer from './components/ProgressDrawer'
 import RoleSelect, { type EntryMode } from './screens/RoleSelect'
+import { goalsForSession } from './engine/goals'
 import SessionSetup from './screens/SessionSetup'
 import Terminal from './screens/Terminal'
 import { DEFAULT_MINUTES, SESSION_TIERS, type OpeningPosition, type SessionMinutes } from './engine/simulation'
@@ -86,6 +88,7 @@ export default function App() {
     'market-maker': clampTierId(deepLink?.tierId ?? archive.settings.tiers?.['market-maker'] ?? DEFAULT_TIER_ID),
   }))
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [progressOpen, setProgressOpen] = useState(false)
   const [mode, setMode] = useState<EntryMode>('simulate')
   const [drill, setDrill] = useState<Drill | null>(null)
   const [drillRecords, setDrillRecords] = useState(() => readDrillRecords())
@@ -160,6 +163,7 @@ export default function App() {
         tiers={tiers}
         onTier={(nextRole, id) => setTiers((previous) => ({ ...previous, [nextRole]: id }))}
         onOpenArchive={() => setArchiveOpen(true)}
+        onOpenProgress={() => setProgressOpen(true)}
         onSelect={(nextRole) => {
           setRole(nextRole)
           setConfigured(false)
@@ -172,6 +176,7 @@ export default function App() {
       <SessionSetup
         role={role}
         minutes={minutes}
+        goals={goalsForSession({ desk: role, minutes, tier: tierById(role, tiers[role]) })}
         onStart={(book) => {
           setOpeningBook(book)
           setConfigured(true)
@@ -201,6 +206,12 @@ export default function App() {
   return (
     <I18nProvider lang={language}>
       {screen}
+      {progressOpen ? (
+        <ProgressDrawer
+          sessions={archive.file.sessions}
+          onClose={() => setProgressOpen(false)}
+        />
+      ) : null}
       {archiveOpen ? (
         <ArchiveDrawer
           file={archive.file}

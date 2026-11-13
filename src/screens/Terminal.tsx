@@ -19,8 +19,10 @@ import {
   selectSeries,
   selectSessionMeta,
   venuePricePreview,
+  selectRestingOrders,
   type DealerRequestInput,
   type ExchangeTradeInput,
+  type LimitOrderInput,
   type FillInput,
   type OpeningPosition,
   type QuoteInput,
@@ -29,6 +31,7 @@ import {
 import type { Scenario } from '../engine/scenarios'
 import type { DifficultyTier } from '../engine/difficulty'
 import { evaluateSession } from '../engine/evaluation'
+import { evaluateGoals, goalsForSession } from '../engine/goals'
 import {
   adviceFor,
   coachingSummary,
@@ -40,6 +43,17 @@ import { NEWS_REACTION_TICKS } from '../engine/telemetry'
 import { useT } from '../i18n'
 import { useSimulation } from '../hooks/useSimulation'
 import { makeSessionId, type ArchivedSession } from '../storage/archive'
+import {
+  buildGhost,
+  clearGhost,
+  parseGhost,
+  readGhost,
+  serializeGhost,
+  writeGhost,
+  type GhostDecision,
+  type GhostSession,
+  type GhostSummary,
+} from '../storage/ghost'
 import { drillProgress, type Drill, type DrillId } from '../train/drills'
 import type { DrillRecord } from '../train/records'
 import ChartPanel from '../components/ChartPanel'
@@ -58,6 +72,7 @@ import ReplayDrawer, {
   type ReplayDecision,
   type ReplayEvent,
 } from '../components/ReplayDrawer'
+import GhostDrawer from '../components/GhostDrawer'
 import SettlementReport from '../components/SettlementReport'
 import StatusBar from '../components/StatusBar'
 import TopBar from '../components/TopBar'
@@ -115,6 +130,8 @@ export default function Terminal({
   const [replayOpen, setReplayOpen] = useState(false)
   const [flowOpen, setFlowOpen] = useState(false)
   const [reportDismissed, setReportDismissed] = useState(false)
+  const [ghost, setGhost] = useState<GhostSession | null>(() => readGhost())
+  const [ghostOpen, setGhostOpen] = useState(false)
 
   const instruments = selectInstruments(state)
   const instrument = instruments.find((item) => item.symbol === selected) ?? instruments[0]
@@ -132,6 +149,7 @@ export default function Terminal({
   const dealerQuotes = selectDealerQuotes(state)
   const venuePreview = venuePricePreview(state, selected)
   const instrumentPosition = positions.find((item) => item.symbol === selected)?.netQty ?? 0
+    const workingOrders = selectRestingOrders(state).filter((order) => order.symbol === selected)
   /* 高档位的成交率只是估算，屏幕上会轻微抖动 */
   const fillJitter = tier.estFillJitter
     ? Math.sin(state.tick * 0.7) * tier.estFillJitter
@@ -148,6 +166,8 @@ export default function Terminal({
   const review = decisionReview(state)
   const scenarioMeta = selectScenario(state)
   const verdict = evaluateSession(state)
+  const goals = goalsForSession({ desk: role, minutes: meta.minutes, tier })
+  const goalStatus = closed ? evaluateGoals(goals, state) : []
   const history = selectHistory(state)
   const agents = selectAgents(state)
   /* 每次结算写一条本地存档：同 seed/剧本/时长且同一收盘点的重复渲染只写一次 */
@@ -197,8 +217,9 @@ export default function Terminal({
       adverse: review.adverse.length,
       missed: review.missed.length,
       worstDrawdown: review.worstDrawdown ? review.worstDrawdown.dollars : 0,
+      tags: verdict.tags.map((tag) => tag.label),
     })
-  }, [closed, onSessionSaved, role, meta.seed, meta.minutes, meta.clock, scenarioMeta.id, scenarioMeta.name, settlement, score, review])
+  }, [closed, onSessionSaved, role, meta.seed, meta.minutes, meta.clock, scenarioMeta.id, scenarioMeta.name, settlement, score, review, verdict])
 
   /* 回放：价格帧直接用引擎历史；决策与事件从遥测里还原成时间轴上的点 */
   const timeAtTick = new Map(history.map((frame) => [frame.tick, frame.time]))
@@ -238,6 +259,55 @@ export default function Terminal({
     })),
   ].sort((a, b) => a.tick - b.tick)
 
+  /* 同题对比：把这一局压成一份可导出的影子，对比时只看数字与决策时间轴 */
+  const ghostSummary: GhostSummary = {
+    desk: role,
+    scenarioName: scenarioMeta.name,
+    tier: tier.id,
+    minutes: meta.minutes,
+    seed: meta.seed,
+    composite: score.composite,
+    percentile: score.percentile,
+    total: settlement.total,
+    alpha: settlement.alpha,
+    trades: settlement.trades,
+    tags: verdict.tags.map((tag) => tag.label),
+  }
+  const ghostDecisions: GhostDecision[] = replayDecisions.map((decision) => ({
+    id: decision.id,
+    tick: decision.tick,
+    time: decision.time,
+    kind: decision.kind,
+    label: decision.label,
+    detail: decision.detail,
+  }))
+
+  const handleExportGhost = () => {
+    const next = buildGhost(ghostSummary, ghostDecisions)
+    writeGhost(next)
+    setGhost(next)
+    const blob = new Blob([serializeGhost(next)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `market-sim-${role}-${meta.seed}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportGhost = (text: string) => {
+    if (!text.trim()) {
+      clearGhost()
+      setGhost(null)
+      return ''
+    }
+    const { ghost: parsed, error } = parseGhost(text)
+    if (!parsed) return error ?? t('Could not read that replay file.')
+    writeGhost(parsed)
+    setGhost(parsed)
+    return ''
+  }
+
   const selectRfq = (id: string) => {
     setActiveRfqId(id)
     const rfq = rfqs.find((item) => item.id === id)
@@ -256,6 +326,8 @@ export default function Terminal({
   const handleQuote = (input: QuoteInput) => simulation.sendQuote(input)
   const handleFill = (input: FillInput) => simulation.fillClientOrder(input)
   const handleExchangeTrade = (input: ExchangeTradeInput) => simulation.tradeOnExchange(input)
+    const handlePlaceLimit = (input: LimitOrderInput) => simulation.placeLimitOrder(input)
+    const handleCancelOrder = (orderId: string) => simulation.cancelLimitOrder(orderId)
   const handleDealerRequest = (input: DealerRequestInput) => simulation.requestDealerQuote(input)
   const handleDealerHit = (quoteId: string, side: 'BUY' | 'SELL') =>
     simulation.hitDealerQuote({ quoteId, side })
@@ -354,6 +426,9 @@ export default function Terminal({
             preview={venuePreview}
             tier={tier}
             netQty={instrumentPosition}
+              workingOrders={workingOrders}
+              onPlaceLimit={handlePlaceLimit}
+              onCancelOrder={handleCancelOrder}
             onTrade={handleExchangeTrade}
           />
           <ChartPanel
@@ -402,6 +477,14 @@ export default function Terminal({
           onClose={() => setReplayOpen(false)}
         />
       ) : null}
+      {ghostOpen ? (
+        <GhostDrawer
+          ghost={ghost}
+          current={ghostSummary}
+          onImport={handleImportGhost}
+          onClose={() => setGhostOpen(false)}
+        />
+      ) : null}
       {closed && !reportDismissed ? (
         <SettlementReport
           desk={t(role === 'sales' ? 'SALES DESK' : 'MARKET MAKING DESK')}
@@ -411,6 +494,10 @@ export default function Terminal({
           review={review}
           verdict={verdict}
           tierName={t(tier.name)}
+          goals={goalStatus}
+          onExportGhost={handleExportGhost}
+          onCompareGhost={() => setGhostOpen(true)}
+          hasGhost={Boolean(ghost)}
           scenarioName={t(scenarioMeta.name)}
           drill={drill}
           drillProgress={progress}
