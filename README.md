@@ -507,3 +507,12 @@ Four small loops that turn a session into practice rather than a one-off game:
 2. **Settlement goals + P&L attribution** — the report ticks every goal (✓/✗ with current vs target) and splits the total into `Client spread`, `Taker cost (spread + impact)`, `Commission` and `Inventory & drift`, ending on `TOTAL P&L`.
 3. **Progress drawer** — `PROGRESS` on the entry screen aggregates the local archive: session count, average score, average alpha, beat-the-benchmark rate, a trend line of the last 20 composites, breakdowns by desk / scenario / tier, and the most common weakness tags.
 4. **Ghost compare** — `EXPORT GHOST` downloads the session as a small JSON (summary + decision timeline). `IMPORT GHOST` loads a teammate's file into the `GHOST REPLAY` drawer and puts your numbers next to theirs (score, percentile, alpha, total, trades) with a delta column and their decision log. Clearing the ghost is `CLEAR GHOST`.
+
+### Settlement leaderboard
+
+Every finished session now ends with a two-tab `LEADERBOARD` card:
+
+- **THIS SESSION** ranks the 30 flow agents and you on **return on capital** (`You are #12 of 31`). Agents run $1m each, your mandate is the $20m trading budget, so raw dollars would be unfair — the dollar P&L is still shown next to the percentage.
+- **LOCAL HISTORY** ranks your saved sessions by composite score (`This run sits #3 of 12`), showing date, desk, tier, minutes, score and alpha. The current run is appended even if it falls outside the visible top and is tagged `THIS RUN`.
+
+It is purely front-end: the agent board comes from the live simulation state, the history board from the local archive (`market-sim.archive.v1`). A shared/server ranking would need a backend, which is deliberately out of scope for now.

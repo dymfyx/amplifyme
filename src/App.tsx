@@ -187,6 +187,7 @@ export default function App() {
   } else {
     screen = (
       <Terminal
+        savedSessions={archive.file.sessions}
         role={role}
         openingBook={openingBook}
         seed={seed}

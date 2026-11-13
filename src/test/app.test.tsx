@@ -723,3 +723,28 @@ describe('limit orders and the practice loop', () => {
     expect(screen.getByRole('dialog', { name: 'Training progress' })).toBeInTheDocument()
   })
 })
+
+describe('session leaderboard', () => {
+  it('ranks the finished session against the machines', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    expect(screen.getByTestId('leaderboard-card')).toBeInTheDocument()
+    expect(screen.getByText(/against the machines, on return on capital/)).toBeInTheDocument()
+    expect(screen.getByTestId('leaderboard-you')).toBeInTheDocument()
+  })
+
+  it('shows the local history tab with this run on it', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Local history' }))
+    expect(screen.getByTestId('leaderboard-history')).toBeInTheDocument()
+    expect(screen.getByText(/in your local archive, by composite score/)).toBeInTheDocument()
+    expect(screen.getAllByText(/THIS RUN/).length).toBeGreaterThan(0)
+  })
+})

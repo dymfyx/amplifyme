@@ -32,6 +32,7 @@ import type { Scenario } from '../engine/scenarios'
 import type { DifficultyTier } from '../engine/difficulty'
 import { evaluateSession } from '../engine/evaluation'
 import { evaluateGoals, goalsForSession } from '../engine/goals'
+import { historyLeaderboard, sessionLeaderboard } from '../engine/leaderboard'
 import {
   adviceFor,
   coachingSummary,
@@ -100,6 +101,8 @@ interface TerminalProps {
   onExitDrill?: () => void
   /** 本局结算后自动写入本地存档 */
   onSessionSaved?: (session: ArchivedSession) => void
+  /** 本地历史存档：结算榜单的历史页签用它排名 */
+  savedSessions?: ArchivedSession[]
   onExit: () => void
 }
 
@@ -115,6 +118,7 @@ export default function Terminal({
   onDrillResult,
   onExitDrill,
   onSessionSaved,
+  savedSessions = [],
   onExit,
 }: TerminalProps) {
   const t = useT()
@@ -185,6 +189,43 @@ export default function Terminal({
     if (record) setDrillResult({ attempts: record.attempts, passes: record.passes })
   })
 
+  /* 这一局的存档记录：结算时既写入本地存档，也参与历史榜排名 */
+  const buildArchiveSession = (): ArchivedSession => ({
+    id: makeSessionId(
+      role === 'sales' ? 'sales' : 'market-maker',
+      meta.seed,
+      scenarioMeta.id,
+      meta.minutes,
+      meta.clock,
+    ),
+    savedAt: new Date().toISOString(),
+    desk: role === 'sales' ? 'sales' : 'market-maker',
+    scenarioId: scenarioMeta.id,
+    scenarioName: scenarioMeta.name,
+    minutes: meta.minutes,
+    tier: tier.id,
+    seed: meta.seed,
+    total: settlement.total,
+    realised: settlement.realised,
+    unrealised: settlement.unrealised,
+    commission: settlement.commission,
+    cash: settlement.cash,
+    benchmarkPnl: settlement.benchmarkPnl,
+    alpha: settlement.alpha,
+    composite: score.composite,
+    percentile: score.percentile,
+    trades: settlement.trades,
+    quotes: settlement.quotes,
+    informedFills: review.informed.fills,
+    informedRfqs: review.informed.rfqs,
+    adverse: review.adverse.length,
+    missed: review.missed.length,
+    worstDrawdown: review.worstDrawdown ? review.worstDrawdown.dollars : 0,
+    tags: verdict.tags.map((tag) => tag.label),
+  })
+  const leaderboard = sessionLeaderboard(agents, settlement.total)
+  const historyBoard = historyLeaderboard(savedSessions, closed ? buildArchiveSession() : null)
+
   const savedIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!closed || !onSessionSaved) return
@@ -192,33 +233,7 @@ export default function Terminal({
     const id = makeSessionId(desk, meta.seed, scenarioMeta.id, meta.minutes, meta.clock)
     if (savedIdRef.current === id) return
     savedIdRef.current = id
-    onSessionSaved({
-      id,
-      savedAt: new Date().toISOString(),
-      desk,
-      scenarioId: scenarioMeta.id,
-      scenarioName: scenarioMeta.name,
-      minutes: meta.minutes,
-      tier: tier.id,
-      seed: meta.seed,
-      total: settlement.total,
-      realised: settlement.realised,
-      unrealised: settlement.unrealised,
-      commission: settlement.commission,
-      cash: settlement.cash,
-      benchmarkPnl: settlement.benchmarkPnl,
-      alpha: settlement.alpha,
-      composite: score.composite,
-      percentile: score.percentile,
-      trades: settlement.trades,
-      quotes: settlement.quotes,
-      informedFills: review.informed.fills,
-      informedRfqs: review.informed.rfqs,
-      adverse: review.adverse.length,
-      missed: review.missed.length,
-      worstDrawdown: review.worstDrawdown ? review.worstDrawdown.dollars : 0,
-      tags: verdict.tags.map((tag) => tag.label),
-    })
+    onSessionSaved(buildArchiveSession())
   }, [closed, onSessionSaved, role, meta.seed, meta.minutes, meta.clock, scenarioMeta.id, scenarioMeta.name, settlement, score, review, verdict])
 
   /* 回放：价格帧直接用引擎历史；决策与事件从遥测里还原成时间轴上的点 */
@@ -495,6 +510,8 @@ export default function Terminal({
           verdict={verdict}
           tierName={t(tier.name)}
           goals={goalStatus}
+          leaderboard={leaderboard}
+          historyBoard={historyBoard}
           onExportGhost={handleExportGhost}
           onCompareGhost={() => setGhostOpen(true)}
           hasGhost={Boolean(ghost)}

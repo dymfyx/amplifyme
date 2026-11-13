@@ -11,6 +11,7 @@ import { zhTrain } from './i18n/zh-train'
 import { zhClosures } from './i18n/zh-closures'
 import { zhProgress } from './i18n/zh-progress'
 import { zhGhost } from './i18n/zh-ghost'
+import { zhLeaderboard } from './i18n/zh-leaderboard'
 
 export type Language = 'en' | 'zh'
 
@@ -35,6 +36,7 @@ const ZH: Record<string, string> = {
   ...zhClosures,
   ...zhProgress,
   ...zhGhost,
+  ...zhLeaderboard,
   ...zhEval,
 }
 

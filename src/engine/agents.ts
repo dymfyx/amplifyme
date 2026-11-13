@@ -121,7 +121,8 @@ const AGENT_TEMPLATES: Array<{
 /** 台面里的机器交易员数量：一起决定 FLOW 抽屉的 ACTIVE n/30 与测试口径 */
 export const AGENT_COUNT = AGENT_TEMPLATES.length
 
-const START_CASH = 1_000_000
+export const AGENT_START_CASH = 1_000_000
+const START_CASH = AGENT_START_CASH
 /** 每个 agent 的持仓名义金额上限（相对起始资金），超了只能减仓 */
 const MAX_GROSS_RATIO = 2.5
 /** 一帧里单个 agent 最多推动多少基点，避免大单把价格打飞 */

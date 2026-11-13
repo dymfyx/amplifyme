@@ -675,3 +675,10 @@ P0 已交付：
 - 结算与结算卡：`src/engine/goals.ts` 按台面给 3–4 条开局目标（不参与评分），`src/engine/scoring.ts` 新增 `clientEdge / takerEdge / attributionResidual`，报告新增 `SESSION GOALS` 与 `P&L ATTRIBUTION` 两张卡。
 - `ProgressDrawer`（跨局趋势：近 20 局 composite、按台面/剧本/档位分组、最常见弱点标签）与 `GhostDrawer`（导出/导入单局 JSON、YOURS/GHOST/DELTA 对比、影子决策时间轴）由子代理实现，Lead 负责接入 `App` / `Terminal`、i18n（`zh-progress` / `zh-ghost` / `zh-closures`）与样式。
 - 测试：`src/engine/resting.test.ts`（5 例）、`src/engine/goals.test.ts`（6 例）、app 练习闭环用例（限价挂单/撤单、目标卡、结算目标与归因、进度抽屉、ghost 导出对比）；全量见 README 测试数。
+## 26. 结算榜单（P2.18）
+
+- `src/engine/leaderboard.ts`：`sessionLeaderboard(agents, playerPnl)` 把 30 个人机与本局玩家放在一起，按「投入资本百分比收益」排序（人机 `AGENT_START_CASH = $1M`，玩家 `STARTING_CASH = $20M`），返回名次与总人数；`historyLeaderboard(sessions, current, limit=8)` 按 composite 排序本地存档，当前局即使掉出前 N 也会补进来，并按 `id` 去重。
+- `src/components/LeaderboardCard.tsx`：结算报告内两张页签（`THIS SESSION` / `LOCAL HISTORY`），`segmented` 切换，行内高亮当前玩家/当前局；`data-testid` 为 `leaderboard-card` / `leaderboard-session` / `leaderboard-history` / `leaderboard-you`。
+- 数据来源：玩家这一局由 `Terminal` 用同一个 `buildArchiveSession()` 生成（结算时既写入存档，也用于历史榜），历史来自 `App` 传入的 `archive.file.sessions`。
+- 中文由 `src/i18n/zh-leaderboard.ts` 覆盖（排行榜 / 本局 / 本地历史 / 收益率 / 盈亏 / 档位等）。
+- 测试：`src/engine/leaderboard.test.ts` 7 例（31 人同榜、按收益率而非美元、玩家按收益排位、历史按分排序、当前局补榜、不重复、掉出前 N 仍保留），app 2 例（结算榜单渲染、历史页签）；全量 284 例。

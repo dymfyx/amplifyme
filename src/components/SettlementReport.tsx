@@ -3,6 +3,8 @@ import type { ScoreCard } from '../types'
 import type { DecisionReview, SettlementStats } from '../engine/scoring'
 import type { SessionVerdict } from '../engine/evaluation'
 import { formatGoalValue, type GoalStatus } from '../engine/goals'
+import type { HistoryBoard, SessionLeaderboard } from '../engine/leaderboard'
+import LeaderboardCard from './LeaderboardCard'
 import { STARTING_CASH } from '../engine/simulation'
 import { useT } from '../i18n'
 import DrillVerdict from './DrillVerdict'
@@ -27,6 +29,10 @@ interface SettlementReportProps {
   onCompareGhost?: () => void
   /** 是否已经有可对比的影子 */
   hasGhost?: boolean
+  /** 结算榜单：这一局的人机排名 */
+  leaderboard: SessionLeaderboard
+  /** 结算榜单：本地历史前几名 */
+  historyBoard: HistoryBoard
   scenarioName: string
   /** 训练模式：结算时插一张 drill 判定卡 */
   drill?: Drill | null
@@ -69,6 +75,8 @@ export default function SettlementReport({
   onExportGhost,
   onCompareGhost,
   hasGhost = false,
+  leaderboard,
+  historyBoard,
   scenarioName,
   drill = null,
   drillProgress = null,
@@ -253,6 +261,8 @@ export default function SettlementReport({
             </dl>
           </article>
         </div>
+
+        <LeaderboardCard session={leaderboard} history={historyBoard} desk={desk} />
 
         <div className="report__grid">
           <article className="report__card">
