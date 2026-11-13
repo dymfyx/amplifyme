@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Role } from '../types'
 import { SESSION_TIERS, type SessionMinutes } from '../engine/simulation'
 import { SCENARIOS, scenarioById, type Scenario } from '../engine/scenarios'
+import { tiersFor, tierById, type TierId } from '../engine/difficulty'
 import { LANGUAGES, languageLabel, useT, type Language } from '../i18n'
 import ScenarioPicker from '../components/ScenarioPicker'
 import DrillPicker from '../components/DrillPicker'
@@ -60,6 +61,9 @@ interface RoleSelectProps {
   /** 训练模式的记录（只用于卡片上的最佳成绩） */
   drillRecords: DrillRecords
   onStartDrill: (id: DrillId) => void
+  /** 两个台面各自记住的难度档位 */
+  tiers: Record<Role, TierId>
+  onTier: (role: Role, id: TierId) => void
   /** 本地存档里已有多少条记录 */
   archiveCount: number
   onOpenArchive: () => void
@@ -77,6 +81,8 @@ export default function RoleSelect({
   onLanguage,
   onMinutes,
   onScenario,
+  tiers,
+  onTier,
   archiveCount,
   onOpenArchive,
   onSelect,
@@ -168,30 +174,54 @@ export default function RoleSelect({
             />
 
             <div className="role-grid">
-              {ROLE_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className="role-card"
-                  onClick={() => onSelect(option.id)}
-                  aria-label={`Start as ${option.title}`}
-                >
-                  {/* 台面代号是行业缩写，中英文都保留原样 */}
-                  <span className="role-card__tag">{option.tag}</span>
-                  <span className="role-card__title">{t(option.title)}</span>
-                  <span className="role-card__subtitle">{t(option.subtitle)}</span>
-                  <span className="role-card__blurb">{t(option.blurb)}</span>
-                  <span className="role-card__bullets">
-                    {option.bullets.map((bullet) => (
-                      <span key={bullet} className="role-card__bullet">
-                        <i className="role-card__tick">+</i>
-                        {t(bullet)}
-                      </span>
-                    ))}
-                  </span>
-                  <span className="role-card__cta">{t('ENTER DESK →')}</span>
-                </button>
-              ))}
+              {ROLE_OPTIONS.map((option) => {
+                const selectedTier = tierById(option.id, tiers[option.id])
+                return (
+                  <div key={option.id} className="role-card">
+                    {/* 台面代号是行业缩写，中英文都保留原样 */}
+                    <span className="role-card__tag">{option.tag}</span>
+                    <span className="role-card__title">{t(option.title)}</span>
+                    <span className="role-card__subtitle">{t(option.subtitle)}</span>
+                    <span className="role-card__blurb">{t(option.blurb)}</span>
+                    <span className="role-card__bullets">
+                      {option.bullets.map((bullet) => (
+                        <span key={bullet} className="role-card__bullet">
+                          <i className="role-card__tick">+</i>
+                          {t(bullet)}
+                        </span>
+                      ))}
+                    </span>
+
+                    <div className="role-card__difficulty" role="group" aria-label={`${option.title} difficulty`}>
+                      <span className="entry-settings__label">{t('DIFFICULTY')}</span>
+                      <div className="role-card__tiers">
+                        {tiersFor(option.id).map((tier) => (
+                          <button
+                            key={tier.id}
+                            type="button"
+                            className={tier.id === tiers[option.id] ? 'chip chip--on' : 'chip'}
+                            aria-pressed={tier.id === tiers[option.id]}
+                            aria-label={`${option.title} difficulty: ${tier.name}`}
+                            onClick={() => onTier(option.id, tier.id)}
+                          >
+                            {t(tier.name)}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="role-card__tier-blurb">{t(selectedTier.blurb)}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="role-card__cta"
+                      onClick={() => onSelect(option.id)}
+                      aria-label={`Start as ${option.title}`}
+                    >
+                      {t('ENTER DESK →')}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </>
         )}

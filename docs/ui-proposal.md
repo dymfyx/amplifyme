@@ -648,3 +648,24 @@ P0 已交付：
 - 新增 `src/engine/dealer.test.ts`（8 例：角色价差对比、波动项与 dealer 区间、按角色价成交、Sales 询价三家 / MM 被拒、双边价与有效期、未接通与过期、dealer 成交记账、结算与四维评分）。
 - `src/engine/exchange.test.ts` 的成交价断言改成 `venuePricePreview`；`src/train/drills.ts` 的 Two venues 改为「dealer 成交 ≥ 2、alpha > 0」；app 测试重写 Sales 流程（询价 → 打回价、DEALER 徽标）。
 - 全量 **224 例**；`tsc` 干净；`npm run build` 通过。
+
+## 24. 四档难度（P2.14）
+
+**需求原话（m06310）**：四档难度，Sales = 普通股民 / 游资 / 风投公司 / 江一黑天鹅，MM = 散户 / 银行 / 私募 / 大江一基金，两边独立可调；评分系统不变；结束时按分数段 + 人设给文字评价（含嘲讽）；难度体现在点差、新闻波动、手续费、可用工具、报价时效，人机能力随档增强；参数做成预设表。**用户拍板（m06318）**：不加难度系数、毒舌从 <60 分开始、训练模式固定档位。
+
+### 引擎
+
+- `src/engine/difficulty.ts`：`DifficultyTier` 一张表覆盖全部旋钮（`commissionRate / newsVolMult / headlineCount / agentSkill / informedShare / snipeChance / adverseDriftMult / perNameLimit / grossLimit / exchangeMode / maxExchangeQty / maxExchangeBookShare / declineQuota / declineHeat / allowShort / dealerCount / dealerDowntime / dealerLatencyBonus / dealerValidityMult / dealerGapMult / exchangeGapMult / liquidityDrain / clientIntervalMult / clientUnitsMin / clientUnitsMax / makerGapMult / quoteTtlMult / queueDecayMult / widthPenalty / estFillJitter`）；`SALES_TIERS` / `MAKER_TIERS` 各四行，第 2 档 = 旧行为基准（`BASE`）；`tiersFor / tierById / clampTierId / DEFAULT_TIER_ID`；`verdictBand()`（elite ≥85、strong ≥70、solid ≥60、snark ≥45、brutal <45）。
+- `simulation.ts` 消费这张表：新闻冲量 ×`newsVolMult`、头条抽样到 `headlineCount`；`snipeChance` 让存活 ≥2 跳且宽度 ≥1.2× 的报价被知情流抢走；agent 流量/队列消耗 ×`agentSkill`（成交量另乘 `AGENT_VOLUME_SCALE`）；`queueDecayMult` 加快盘口吃掉我们的挂单；宽报价成交概率乘 `widthFactor`；知情成交后叠加 `6*(adverseDriftMult-1)` bps 逆向冲量；S4 随机流动性抽干（30–60 跳内 spread×2、lot×0.4）；佣金/限额/权限全部读档位；`declineDispatch` 计次并在超配额时加客户热度。
+- 风险约束：`riskLimitBreach()` 在报价、交易所、dealer 成交前统一拦截，提示 `RISK LIMIT · <symbol> net exposure would exceed $X` 或 `gross exposure would exceed $X`；交易所权限 `REDUCE ONLY` / `NO SHORTING` / 单笔上限 / 盘口份额上限同样在引擎侧拒绝。
+
+### UI
+
+- 入口两张角色卡各带一行 4 个难度 chip（默认第 2 档），选中显示该档的英文/中文人设与 blurb；难度按台面分别记忆，写进 `ArchiveSettings.tiers`。
+- 顶栏 `TIME LEFT` 右侧显示当前档位名；交易所面板标题显示权限标签（`FULL ACCESS` / `REDUCE ONLY` / `NO SHORTING`），数量输入 title 说明单笔上限；`EST. FILL` 按 `estFillJitter` 抖动。
+- 结算报告在基准对比下方新增 `SESSION VERDICT`：档位名 + band 标题 + `BEHAVIOUR TAGS`（最多 6 个）+ 一句点评；`snark/brutal` 换红色边与毒舌文案，其余用绿色/中性。文案在 `src/i18n/zh-eval.ts`（45 条）。
+- 深链支持 `&tier=1..4`；存档 `ArchivedSession.tier` 记录本局档位；训练项目固定档位（`Drill.tier`）。
+
+### 测试
+
+`src/engine/difficulty.test.ts`（档位数量/递增/基准档/权限/合法性/band 边界/命名）、`src/engine/evaluation.test.ts`（兜底标签、snark 语气、patient/overtrading/chaser/headline-hunter 触发、去重上限）、`src/test/app.test.tsx` 新增 4 例（入口 8 个难度 chip、选档进台面、`&tier=4` 深链、结算 `SESSION VERDICT`）。全量 **241 例**。

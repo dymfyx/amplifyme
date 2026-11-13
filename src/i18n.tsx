@@ -3,6 +3,7 @@ import { zhAgents } from './i18n/zh-agents'
 import { zhArchive } from './i18n/zh-archive'
 import { zhChrome } from './i18n/zh-chrome'
 import { zhData } from './i18n/zh-data'
+import { zhEval } from './i18n/zh-eval'
 import { zhPanels } from './i18n/zh-panels'
 import { zhReplay } from './i18n/zh-replay'
 import { zhScenario } from './i18n/zh-scenario'
@@ -28,6 +29,7 @@ const ZH: Record<string, string> = {
   ...zhScenario,
   ...zhReplay,
   ...zhAgents,
+  ...zhEval,
 }
 
 export type Translate = (text: string, vars?: Record<string, string | number>) => string

@@ -2,6 +2,7 @@ import type { Role } from '../types'
 import { SCENARIOS, type Scenario } from '../engine/scenarios'
 import type { OpeningPosition, SessionMinutes, SimulationState } from '../engine/simulation'
 import { decisionReview, selectSettlement } from '../engine/scoring'
+import type { TierId } from '../engine/difficulty'
 
 /** 训练模式里的一组固定练习：每个 drill 锁死台面、时长、剧本与开局仓位 */
 export type DrillId =
@@ -36,6 +37,8 @@ export interface Drill {
   /** 固定种子：同一道题可重试，分数可比 */
   seed: number
   scenarioId: string
+  /** 训练项目固定档位：同一套动作在不同难度下评价不同，所以锁死 */
+  tier: TierId
   /** 开局仓位；空数组 = 空仓 */
   openingBook: OpeningPosition[]
   criteria: DrillCriterion[]
@@ -69,6 +72,7 @@ export const DRILLS: Drill[] = [
     minutes: 5,
     seed: 1042,
     scenarioId: 'classic',
+    tier: 2,
     openingBook: [],
     criteria: [
       { id: 'quotes', label: 'Quotes sent', compare: 'gte', target: 8, unit: 'count' },
@@ -83,6 +87,7 @@ export const DRILLS: Drill[] = [
     minutes: 5,
     seed: 2213,
     scenarioId: 'fomc',
+    tier: 2,
     openingBook: [],
     criteria: [
       { id: 'headlines', label: 'Headlines traded', compare: 'gte', target: 4, unit: 'count' },
@@ -97,6 +102,7 @@ export const DRILLS: Drill[] = [
     minutes: 5,
     seed: 3307,
     scenarioId: 'classic',
+    tier: 2,
     openingBook: [{ symbol: 'TSLA', netQty: 1500, avgPrice: 196.8 }],
     criteria: [{ id: 'maxPosition', label: 'Largest position at close', compare: 'lte', target: 300, unit: 'shares' }],
   },
@@ -108,6 +114,7 @@ export const DRILLS: Drill[] = [
     minutes: 5,
     seed: 4409,
     scenarioId: 'crash',
+    tier: 3,
     openingBook: [],
     criteria: [
       { id: 'pickedOff', label: 'Fills run over', compare: 'lte', target: 2, unit: 'count' },
@@ -122,6 +129,7 @@ export const DRILLS: Drill[] = [
     minutes: 5,
     seed: 5501,
     scenarioId: 'classic',
+    tier: 2,
     openingBook: [],
     criteria: [
       { id: 'dealer', label: 'Dealer fills', compare: 'gte', target: 2, unit: 'count' },

@@ -56,6 +56,7 @@ export function useSimulation(
   minutes: SessionMinutes = DEFAULT_MINUTES,
   scenario?: SessionOptions['scenario'],
   role: Role = 'market-maker',
+  tier: SessionOptions['tier'] = undefined,
 ): SimulationApi {
   const [state, setState] = useState<SimulationState>(initial)
   const [latencyMs, setLatencyMs] = useState(14)
@@ -105,8 +106,9 @@ export function useSimulation(
       togglePause: () => commit(togglePause(latest.current)),
       cycleSpeed: () => commit(cycleSpeed(latest.current)),
       setSpeed: (speed) => commit(applySpeed(latest.current, speed)),
-      restart: () => commit(createSession(fixedSeed ?? undefined, openingBook, { minutes, scenario, role })),
+      restart: () =>
+        commit(createSession(fixedSeed ?? undefined, openingBook, { minutes, scenario, role, tier })),
     }),
-    [state, latencyMs, run, commit, openingBook, fixedSeed, minutes, scenario, role],
+    [state, latencyMs, run, commit, openingBook, fixedSeed, minutes, scenario, role, tier],
   )
 }

@@ -92,7 +92,12 @@ describe('emptyArchive', () => {
     expect(file.version).toBe(1)
     expect(Number.isNaN(Date.parse(file.updatedAt))).toBe(false)
     expect(file.sessions).toEqual([])
-    expect(file.settings).toEqual({ language: 'en', minutes: 30, scenarioId: 'classic' })
+    expect(file.settings).toEqual({
+    language: 'en',
+    minutes: 30,
+    scenarioId: 'classic',
+    tiers: { sales: 2, 'market-maker': 2 },
+  })
   })
 })
 
@@ -147,6 +152,7 @@ describe('readSettings / writeSettings', () => {
       language: 'en',
       minutes: 30,
       scenarioId: 'classic',
+      tiers: { sales: 2, 'market-maker': 2 },
     })
   })
 
@@ -157,10 +163,16 @@ describe('readSettings / writeSettings', () => {
       language: 'zh',
       minutes: 15,
       scenarioId: 'momentum',
+      tiers: { sales: 2, 'market-maker': 2 },
     })
 
     storage.setItem(SETTINGS_KEY, 'not json')
-    expect(readSettings(storage)).toEqual({ language: 'en', minutes: 30, scenarioId: 'classic' })
+    expect(readSettings(storage)).toEqual({
+      language: 'en',
+      minutes: 30,
+      scenarioId: 'classic',
+      tiers: { sales: 2, 'market-maker': 2 },
+    })
   })
 })
 

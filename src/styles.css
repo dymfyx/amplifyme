@@ -153,14 +153,11 @@ button {
   background: linear-gradient(180deg, rgba(22, 35, 58, 0.9), rgba(15, 24, 38, 0.9));
   border: 1px solid var(--line);
   border-radius: 4px;
-  cursor: pointer;
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .role-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 12px 30px rgba(4, 10, 20, 0.55);
+  border-color: var(--line);
 }
 
 .role-card:focus-visible {
@@ -218,10 +215,41 @@ button {
 .role-card__cta {
   margin-top: 14px;
   padding-top: 12px;
+  border: 0;
   border-top: 1px solid var(--line-soft);
+  background: none;
   color: var(--accent);
+  font-family: inherit;
   font-size: 11px;
   letter-spacing: 0.14em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.role-card__cta:hover {
+  color: var(--text-1);
+}
+
+.role-card__difficulty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+}
+
+.role-card__tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.role-card__tier-blurb {
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.45;
+  min-height: 28px;
 }
 
 .role-select__footer {
@@ -2405,4 +2433,78 @@ table.grid.grid--setup tbody tr:last-child td {
   border-left-color: var(--warn);
   background: rgba(245, 166, 35, 0.08);
   color: var(--warn);
+}
+/* ---- 赛后评价卡（难度档 + 行为标签 + 一句点评） ---- */
+.report__verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(22, 35, 58, 0.4);
+}
+
+.report__verdict--elite,
+.report__verdict--strong {
+  border-color: rgba(46, 204, 143, 0.45);
+}
+
+.report__verdict--snark,
+.report__verdict--brutal {
+  border-color: rgba(255, 92, 108, 0.45);
+}
+
+.report__verdict-headline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.report__verdict-headline--praise {
+  color: var(--up);
+}
+
+.report__verdict-headline--neutral {
+  color: var(--text-1);
+}
+
+.report__verdict-headline--snark {
+  color: var(--down);
+}
+
+.report__verdict-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.report__verdict-tag {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.report__verdict-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+@media (max-height: 900px) {
+  .report__verdict {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .report__verdict-headline {
+    font-size: 13px;
+  }
 }

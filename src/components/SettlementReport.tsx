@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ScoreCard } from '../types'
 import type { DecisionReview, SettlementStats } from '../engine/scoring'
+import type { SessionVerdict } from '../engine/evaluation'
 import { STARTING_CASH } from '../engine/simulation'
 import { useT } from '../i18n'
 import DrillVerdict from './DrillVerdict'
@@ -13,6 +14,10 @@ interface SettlementReportProps {
   coaching: string
   /** 决策审阅：逆向选择、错过的消息、最大回撤、消息灵通客户占比 */
   review: DecisionReview
+  /** 赛后文字评价：分档 + 行为标签 + 一句点评 */
+  verdict: SessionVerdict
+  /** 本局难度档位名（显示在评价卡角上） */
+  tierName: string
   scenarioName: string
   /** 训练模式：结算时插一张 drill 判定卡 */
   drill?: Drill | null
@@ -49,6 +54,8 @@ export default function SettlementReport({
   score,
   coaching,
   review,
+  verdict,
+  tierName,
   scenarioName,
   drill = null,
   drillProgress = null,
@@ -161,6 +168,25 @@ export default function SettlementReport({
             onExit={onDrillExit ?? onClose}
           />
         ) : null}
+
+        <div className={`report__verdict report__verdict--${verdict.band}`}>
+          <div className="report__review-head">
+            <h3 className="report__card-title">{t('SESSION VERDICT')}</h3>
+            <span className="report__review-scenario">{tierName}</span>
+          </div>
+          <p className={`report__verdict-headline report__verdict-headline--${verdict.tone}`}>
+            {t(verdict.headline)}
+          </p>
+          <div className="report__verdict-tags">
+            <span className="report__review-label">{t('BEHAVIOUR TAGS')}</span>
+            {verdict.tags.map((tag) => (
+              <span key={tag.key} className="report__verdict-tag">
+                {t(tag.label)}
+              </span>
+            ))}
+          </div>
+          <p className="report__verdict-note">{t(verdict.line)}</p>
+        </div>
 
         <div className="report__grid">
           <article className="report__card">

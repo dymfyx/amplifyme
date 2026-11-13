@@ -6,6 +6,7 @@ import SessionSetup from './screens/SessionSetup'
 import Terminal from './screens/Terminal'
 import { DEFAULT_MINUTES, SESSION_TIERS, type OpeningPosition, type SessionMinutes } from './engine/simulation'
 import { DEFAULT_SCENARIO, SCENARIOS, type Scenario } from './engine/scenarios'
+import { DEFAULT_TIER_ID, clampTierId, tierById, type TierId } from './engine/difficulty'
 import { I18nProvider, type Language } from './i18n'
 import { useArchive } from './hooks/useArchive'
 import { drillById, scenarioForDrill, type Drill, type DrillId } from './train/drills'
@@ -21,6 +22,8 @@ interface DeepLink {
   minutes: SessionMinutes
   /** 链接里指定的情景剧本（内置场景 id，例如 crash） */
   scenario: Scenario
+  /** 链接里指定的难度档位（1-4，两个台面共用同一个值） */
+  tierId: TierId
 }
 
 const isLanguage = (value: string | null): value is Language => value === 'en' || value === 'zh'
@@ -49,12 +52,15 @@ const readDeepLink = (): DeepLink | null => {
   const minutesParam = params.get('minutes')
   const scenarioParam = params.get('scenario')
   const scenario = SCENARIOS.find((item) => item.id === scenarioParam) ?? DEFAULT_SCENARIO
+  const tierParam = params.get('tier')
+  const tierId: TierId = tierParam === null ? DEFAULT_TIER_ID : clampTierId(tierParam)
   return {
     role: path,
     seed,
     language: isLanguage(langParam) ? langParam : 'en',
     minutes: parseMinutes(minutesParam),
     scenario,
+    tierId,
   }
 }
 
@@ -74,6 +80,11 @@ export default function App() {
       SCENARIOS.find((item) => item.id === archive.settings.scenarioId) ??
       DEFAULT_SCENARIO,
   )
+  // 两个台面各自记住自己的难度档位
+  const [tiers, setTiers] = useState<Record<Role, TierId>>(() => ({
+    sales: clampTierId(deepLink?.tierId ?? archive.settings.tiers?.sales ?? DEFAULT_TIER_ID),
+    'market-maker': clampTierId(deepLink?.tierId ?? archive.settings.tiers?.['market-maker'] ?? DEFAULT_TIER_ID),
+  }))
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [mode, setMode] = useState<EntryMode>('simulate')
   const [drill, setDrill] = useState<Drill | null>(null)
@@ -88,6 +99,7 @@ export default function App() {
     setMinutes(next.minutes)
     setSeed(next.seed)
     setScenario(scenarioForDrill(next))
+    setTiers((previous) => ({ ...previous, [next.role]: next.tier }))
     setOpeningBook(next.openingBook)
     setConfigured(true)
     window.location.hash = ''
@@ -116,8 +128,8 @@ export default function App() {
   // 入口上的选择立即记进设置，下次打开还是这套（saveSettings 是稳定回调，不能把 archive 放进依赖）
   const saveSettings = archive.saveSettings
   useEffect(() => {
-    saveSettings({ language, minutes, scenarioId: scenario.id })
-  }, [saveSettings, language, minutes, scenario.id])
+    saveSettings({ language, minutes, scenarioId: scenario.id, tiers })
+  }, [saveSettings, language, minutes, scenario.id, tiers])
 
   const reset = () => {
     setConfigured(false)
@@ -145,6 +157,8 @@ export default function App() {
         onLanguage={setLanguage}
         onMinutes={setMinutes}
         onScenario={setScenario}
+        tiers={tiers}
+        onTier={(nextRole, id) => setTiers((previous) => ({ ...previous, [nextRole]: id }))}
         onOpenArchive={() => setArchiveOpen(true)}
         onSelect={(nextRole) => {
           setRole(nextRole)
@@ -173,6 +187,7 @@ export default function App() {
         seed={seed}
         minutes={minutes}
         scenario={scenario}
+        tier={tierById(role, tiers[role])}
         drill={drill}
         drillRecord={drill ? drillRecords[drill.id] ?? null : null}
         onDrillResult={reportDrillResult}

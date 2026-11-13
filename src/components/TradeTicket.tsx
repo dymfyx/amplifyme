@@ -16,6 +16,8 @@ interface TradeTicketProps {
   quotes: QuoteRow[]
   recentFills: TradeRow[]
   cash: number
+  /** 高档位的 EST. FILL 会有抖动（工具不那么好用的感觉），默认 0 */
+  fillJitter?: number
   onQuote: (input: QuoteInput) => string
   onFill: (input: FillInput) => string
   onDecline: () => string
@@ -29,6 +31,7 @@ export default function TradeTicket({
   quotes,
   recentFills,
   cash,
+  fillJitter = 0,
   onQuote,
   onFill,
   onDecline,
@@ -63,7 +66,9 @@ export default function TradeTicket({
   /* 报价宽度相对市场价差 → 客户接受概率（报得越宽越难成交） */
   const marketSpread = book.asks[0].price - book.bids[0].price
   const ourSpread = Number(offerPrice || 0) - Number(bidPrice || 0)
-  const fillChance = marketSpread > 0 && ourSpread > 0 ? fillProbability(ourSpread / marketSpread) : 1
+  const baseFillChance = marketSpread > 0 && ourSpread > 0 ? fillProbability(ourSpread / marketSpread) : 1
+  /* 高档位显示的是估算值：会上下摆动，别把 96% 当成承诺 */
+  const fillChance = Math.min(0.99, Math.max(0.02, baseFillChance + fillJitter))
 
   const onSend = () => {
     if (isMaker) {

@@ -14,6 +14,7 @@ import type {
 } from '../types'
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
 import { DISPATCH_NOTES, FLOW_EVENTS, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
+import { DEFAULT_TIER_ID, tierById, type DifficultyTier } from './difficulty'
 import { dealerGap, quoteAroundMid, venueGap, volatilityScore } from './venues'
 import {
   aggregateFlows,
@@ -124,8 +125,6 @@ const INFORMED_INTERVAL_MIN = 1000
 const INFORMED_INTERVAL_MAX = 2400
 /** 派单在客户失去耐心前有效（模拟秒），按客户画像的 patience 缩放 */
 const DISPATCH_TTL = 6000
-/** 有热度时派来的客户里有多少是 informed */
-const INFORMED_SHARE = 0.75
 /** 客户画像里 patience 的基准值（对应 DISPATCH_TTL） */
 const PATIENCE_BASE = 15
 /** 排队消耗速度：每帧这个价位附近有多少主动成交量（手数 × 随机倍数） */
@@ -242,6 +241,8 @@ export interface LiveQuote extends QuoteRow {
   tolerance: number
   /** 从发出到排到队首用了多少帧 */
   queueTicks: number
+  /** 报价发出的 tick，用来判断「陈旧报价」会不会被知情客户打 */
+  createdTick: number
   rfqId?: string
 }
 
@@ -308,6 +309,14 @@ export interface SimulationState {
   role: Role
   /** Sales 向 dealer 发出的问价与收到的回价（P2.13） */
   dealerQuotes: DealerQuote[]
+  /** 这一局选择的难度档位（P2.14），参数见 difficulty.ts 的预设表 */
+  tier: DifficultyTier
+  /** 本局每边佣金（由难度档位决定，基准 5bps） */
+  commissionRate: number
+  /** 本局已拒单数：超过档位配额后客户热度涨得更快 */
+  declines: number
+  /** S4 黑天鹅：流动性被抽干的截止 tick（0 = 未触发/已结束） */
+  drainUntilTick: number
 }
 
 /** Sales 向 dealer 要价：一条回价记录 */
@@ -458,6 +467,8 @@ export interface SessionOptions {
   scenario?: Scenario
   /** 台面角色：决定交易所成交价（MM 更紧 / Sales 更宽）和可用工具，默认 market-maker */
   role?: Role
+  /** 难度档位（P2.14）：不传则用该角色的 2 档（基准手感） */
+  tier?: DifficultyTier
 }
 
 export function createSession(
@@ -467,6 +478,20 @@ export function createSession(
 ): SimulationState {
   const minutes = options.minutes ?? DEFAULT_MINUTES
   const scenario = options.scenario ?? DEFAULT_SCENARIO
+  const role = options.role ?? 'market-maker'
+  const tier = options.tier ?? tierById(role, DEFAULT_TIER_ID)
+  /* 档位越高，头条条数越多：均匀抽掉多余的，保持时间轴铺满整局 */
+  const newsSource = scenario.news
+  const keptNews =
+    newsSource.length <= tier.headlineCount
+      ? newsSource.map((item, index) => ({ item, index }))
+      : newsSource
+          .map((item, index) => ({ item, index }))
+          .filter(
+            ({ index }) =>
+              Math.floor((index * tier.headlineCount) / newsSource.length) <
+              Math.floor(((index + 1) * tier.headlineCount) / newsSource.length),
+          )
   /* 场景可以把盘口拉宽、把深度抽干：崩盘日做市要难得多 */
   const spreadMultiplier = scenario.spreadMultiplier ?? 1
   const liquidityMultiplier = scenario.liquidityMultiplier ?? 1
@@ -528,7 +553,7 @@ export function createSession(
     quotes: [],
     dispatch: [initialDispatch()],
     news: [],
-    pendingNews: scenario.news.map((item, index) => {
+    pendingNews: keptNews.map(({ item, index }) => {
       const at = START_SECONDS + item.at * SESSION_SECONDS
       return {
         id: scenario.id === 'classic' ? (NEWS_TEMPLATES[index]?.id ?? `N${index + 1}`) : `${scenario.id}-${index + 1}`,
@@ -563,8 +588,12 @@ export function createSession(
       },
     ],
     agents,
-    role: options.role ?? 'market-maker',
+    role,
     dealerQuotes: [],
+    tier,
+    commissionRate: tier.commissionRate,
+    declines: 0,
+    drainUntilTick: 0,
   }
 }
 
@@ -622,9 +651,54 @@ export function venuePricePreview(state: SimulationState, symbol: string): Venue
   const instrument = state.instruments.find((item) => item.symbol === symbol)
   const mid = instrument ? bookMid(instrument.book) : 0
   const volatility = instrumentVolatility(state, symbol)
-  const gap = venueGap(state.role, volatility)
-  const { buy, sell, gapPoints } = quoteAroundMid(mid, gap)
-  return { mid, buy, sell, gapPoints, gapBps: round2(gap * 10000), volatility }
+  const tier = tierOf(state)
+  const baseGap = venueGap(state.role, volatility)
+  const gapMultiplier = state.role === 'sales' ? tier.exchangeGapMult : tier.makerGapMult
+  const { buy, sell, gapPoints } = quoteAroundMid(mid, baseGap * gapMultiplier)
+  return { mid, buy, sell, gapPoints, gapBps: round2(baseGap * gapMultiplier * 10000), volatility }
+}
+
+/** 旧状态/测试夹具可能没有难度档位，统一回落到该角色的基准档 */
+const tierOf = (state: SimulationState): DifficultyTier =>
+  state.tier ?? tierById(state.role ?? 'market-maker', DEFAULT_TIER_ID)
+
+/** 本局每边佣金（比例），档位决定 */
+const commissionOf = (state: SimulationState): number =>
+  Number.isFinite(state.commissionRate) ? state.commissionRate : COMMISSION_RATE
+
+/**
+ * 风险限额检查：这笔主动成交会不会突破单名净敞口或总毛敞口上限。
+ * 返回拒单原因（null = 通过）。限额本身不改变评分公式，只限制能不能做。
+ */
+function riskLimitBreach(
+  state: SimulationState,
+  symbol: string,
+  ourSide: Side,
+  qty: number,
+  price: number,
+): string | null {
+  const tier = tierOf(state)
+  const signed = ourSide === 'BUY' ? qty : -qty
+  const symbols = new Set([...state.positions.map((position) => position.symbol), symbol])
+  let gross = 0
+  let nameValue = 0
+  for (const name of symbols) {
+    const position = state.positions.find((candidate) => candidate.symbol === name)
+    const instrument = state.instruments.find((candidate) => candidate.symbol === name)
+    const instrumentPrice = name === symbol ? price : (instrument?.last ?? position?.avgPrice ?? 0)
+    const quantity = (position?.netQty ?? 0) + (name === symbol ? signed : 0)
+    const value = quantity * instrumentPrice
+    gross += Math.abs(value)
+    if (name === symbol) nameValue = value
+  }
+  const money = (value: number) => `$${Math.round(value).toLocaleString('en-US')}`
+  if (Math.abs(nameValue) > tier.perNameLimit) {
+    return `RISK LIMIT · ${symbol} net exposure would exceed ${money(tier.perNameLimit)}`
+  }
+  if (gross > tier.grossLimit) {
+    return `RISK LIMIT · gross exposure would exceed ${money(tier.grossLimit)}`
+  }
+  return null
 }
 
 function bookOf(instruments: InstrumentState[], symbol: string): Book {
@@ -804,6 +878,7 @@ export function stepSession(state: SimulationState): SimulationState {
   const chartEvents =
     revealedEvents.length === 0 ? state.chartEvents : [...state.chartEvents, ...revealedEvents].slice(-40)
 
+  const tier = tierOf(state)
   /* 1b. 把到点的新闻转成对标的的价格冲量：利好推高、利空压低，按标的波动率放大后逐帧释放 */
   const impulsesBySymbol = new Map<string, PriceImpulse[]>()
   for (const item of due) {
@@ -816,12 +891,33 @@ export function stepSession(state: SimulationState): SimulationState {
         id: `${item.id}-${symbol}`,
         label: item.short,
         direction: item.direction,
-        bps: round2(item.driftBps * volScale(instrument.sigma)),
+        bps: round2(item.driftBps * volScale(instrument.sigma) * tier.newsVolMult),
         ttl: DRIFT_TTL,
         hint: item.headline,
         source: 'headline',
       }
       impulsesBySymbol.set(symbol, [...(impulsesBySymbol.get(symbol) ?? []), impulse])
+    }
+  }
+
+  /* 1b2. 抢单：高档位里，知情客户会专门打掉「又宽又旧」的报价。
+     命中的报价在这一帧被强制成交，然后价格顺着新闻继续走 —— 这就是 PICKED OFF。 */
+  const snipedQuoteIds = new Set<string>()
+  if (tier.snipeChance > 0) {
+    for (const item of due) {
+      if (!item.direction || !item.driftBps) continue
+      const targets = item.symbol ? [item.symbol] : SYMBOLS
+      for (const symbol of targets) {
+        const [snipeRoll, afterSnipe] = nextRandom(rng)
+        rng = afterSnipe
+        if (snipeRoll >= tier.snipeChance) continue
+        for (const quote of state.quotes) {
+          if (quote.symbol !== symbol || quote.status !== 'LIVE') continue
+          if (tick - quote.createdTick < 2) continue
+          if (quote.spreadRatio < 1.2) continue
+          snipedQuoteIds.add(quote.id)
+        }
+      }
     }
   }
 
@@ -835,7 +931,9 @@ export function stepSession(state: SimulationState): SimulationState {
       if (!instrument) continue
       newsBias = {
         ...newsBias,
-        [symbol]: round2((newsBias[symbol] ?? 0) + item.direction * item.driftBps * volScale(instrument.sigma)),
+        [symbol]: round2(
+          (newsBias[symbol] ?? 0) + item.direction * item.driftBps * volScale(instrument.sigma) * tier.newsVolMult,
+        ),
       }
     }
   }
@@ -865,6 +963,14 @@ export function stepSession(state: SimulationState): SimulationState {
 
   /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（0.25 秒）刷新一次 */
   const priceDue = tick - state.lastPriceTick >= PRICE_UPDATE_TICKS
+  /* S4 黑天鹅：整局随机抽干一次流动性（盘口变薄、价差翻倍），30–60 帧后恢复 */
+  let drainUntilTick = state.drainUntilTick
+  if (priceDue && tier.liquidityDrain && drainUntilTick === 0 && tick > 120) {
+    const [drainRoll, afterDrain] = nextRandom(rng)
+    rng = afterDrain
+    if (drainRoll < 0.0008) drainUntilTick = tick + 30 + Math.round(drainRoll * 30_000)
+  }
+  const draining = drainUntilTick > tick
   let priceTape = state.priceTape
   let instruments = priceDue
     ? state.instruments.map((instrument) => {
@@ -914,7 +1020,7 @@ export function stepSession(state: SimulationState): SimulationState {
         /* 这一帧里 30 个流式智能体在同一标的上的净流量；按人数缩放，保持和 10 人时同一量级的波动 */
         const rawAgentFlow = agentFlowBySymbol.get(instrument.symbol) ?? null
         const agentFlow = rawAgentFlow
-          ? { ...rawAgentFlow, bps: round2(rawAgentFlow.bps * AGENT_FLOW_SCALE) }
+          ? { ...rawAgentFlow, bps: round2(rawAgentFlow.bps * AGENT_FLOW_SCALE * tier.agentSkill) }
           : null
         const agentDriver: PriceDriver | null = agentFlow
           ? {
@@ -962,11 +1068,18 @@ export function stepSession(state: SimulationState): SimulationState {
         let book = instrument.book
         let bookMid = instrument.bookMid
         if (
+          draining ||
           headlineBps >= FORCED_REBOOK_BPS ||
           movedBps >= BOOK_MIN_MOVE_BPS ||
           Math.abs(agentFlow?.bps ?? 0) >= FORCED_REBOOK_BPS
         ) {
-          const [nextBook, afterBook] = makeBook(rng, last, instrument.spreadBps, instrument.lot, instrument.book)
+          const [nextBook, afterBook] = makeBook(
+            rng,
+            last,
+            instrument.spreadBps * (draining ? 2 : 1),
+            Math.max(10, Math.round(instrument.lot * (draining ? 0.4 : 1))),
+            instrument.book,
+          )
           rng = afterBook
           book = nextBook
           bookMid = last
@@ -1031,9 +1144,12 @@ export function stepSession(state: SimulationState): SimulationState {
     const [volRoll, afterVol] = nextRandom(rng)
     rng = afterVol
     /* 智能体的主动单也在消耗盘口，所以它们活跃时我们的报价更容易被成交 */
-    const agentVolume = Math.round((agentVolumeBySymbol.get(quote.symbol) ?? 0) * AGENT_VOLUME_SCALE)
-    const marketVolume =
+    const agentVolume = Math.round(
+      (agentVolumeBySymbol.get(quote.symbol) ?? 0) * AGENT_VOLUME_SCALE * tier.agentSkill,
+    )
+    const rawMarketVolume =
       Math.round(lot * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN))) + agentVolume
+    const marketVolume = Math.round(rawMarketVolume * tier.queueDecayMult)
     const queueBefore = quote.queueAhead
     const queueAhead = Math.max(0, queueBefore - marketVolume)
     /* 排在队首之后的帧数：清空队列的那一帧定格，用来衡量「报价被晾了多久」 */
@@ -1044,20 +1160,27 @@ export function stepSession(state: SimulationState): SimulationState {
     }
 
     /* 队列前面的量被吃掉后，剩下的主动成交才可能打到我们 */
-    const available = Math.max(0, marketVolume - queueBefore)
-    const remaining = quote.qty - quote.filledQty
-    if (available > 0 && remaining > 0) {
+    const sniped = snipedQuoteIds.has(quote.id)
+    const remainingQty = quote.qty - quote.filledQty
+    const available = sniped ? remainingQty : Math.max(0, marketVolume - queueBefore)
+    if (available > 0 && remainingQty > 0) {
       const [roll, afterRoll] = nextRandom(rng)
       rng = afterRoll
+      /* 报得比市场宽，除了「更难成交」，在难档位里还要再打折（宽度惩罚） */
+      const widthFactor =
+        quote.spreadRatio > 1
+          ? Math.max(0.2, 1 - (quote.spreadRatio - 1) * (tier.widthPenalty - 1) * 0.6)
+          : 1
       const chance = clampUnit(
         priceCompetitiveness(bookOf(instruments, quote.symbol), quote.clientSide, ourPrice) *
           (0.5 + 0.5 * quote.fillProbability) *
-          quote.tolerance,
+          quote.tolerance *
+          widthFactor,
       )
-      if (roll < chance) {
-        const fillQty = Math.min(remaining, available)
+      if (sniped || roll < chance) {
+        const fillQty = Math.min(remainingQty, available)
         const gross = ourPrice * fillQty
-        const fee = round2(gross * COMMISSION_RATE)
+        const fee = round2(gross * commissionOf(state))
         /* 资金约束：买入必须付得起，付不起这张报价就作废 */
         if (ourSide === 'BUY' && gross + fee > cash) {
           if (quote.rfqId) dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
@@ -1068,6 +1191,31 @@ export function stepSession(state: SimulationState): SimulationState {
         positions = applyPositionFill(positions, quote.symbol, ourSide, fillQty, ourPrice)
         /* 我们自己的成交推动价格：买上推、卖下压，幅度按成交金额（3–10bps），之后逐帧衰减 */
         instruments = applyFillImpact(instruments, quote.symbol, ourSide, gross, tick)
+        /* 知情客户成交后，价格还会顺着他们的方向继续走一段：越难的档位漂得越远 */
+        if (quote.clientType === 'informed' && tier.adverseDriftMult > 1) {
+          const adverseBps = round2(6 * (tier.adverseDriftMult - 1))
+          if (adverseBps >= 0.5) {
+            instruments = instruments.map((instrument) =>
+              instrument.symbol === quote.symbol
+                ? {
+                    ...instrument,
+                    impulses: [
+                      ...instrument.impulses,
+                      {
+                        id: `ADV-${tick}-${quote.symbol}`,
+                        label: 'informed flow',
+                        direction: (ourSide === 'BUY' ? -1 : 1) as 1 | -1,
+                        bps: adverseBps,
+                        ttl: FILL_IMPACT_TTL,
+                        hint: 'An informed client just hit you — the tape keeps moving against your book.',
+                        source: 'flow',
+                      },
+                    ],
+                  }
+                : instrument,
+            )
+          }
+        }
         commission = round2(commission + fee)
         counters = { ...counters, trade: counters.trade + 1, order: counters.order + 1 }
         const filledTrade: TradeRow = {
@@ -1138,7 +1286,9 @@ export function stepSession(state: SimulationState): SimulationState {
     const hot = Object.entries(newsBias).filter(([, value]) => Math.abs(value) >= 8)
     const [typeRoll, afterType] = nextRandom(rng)
     rng = afterType
-    const informed = hot.length > 0 && typeRoll < INFORMED_SHARE
+    const informed = hot.length > 0 && typeRoll < tier.informedShare
+    /* 档位越高：客户来得越密、单子越大 */
+    const intervalMultiplier = tier.clientIntervalMult
     let symbol: string
     let clientSide: Side
     if (informed) {
@@ -1165,7 +1315,11 @@ export function stepSession(state: SimulationState): SimulationState {
       pool.map((profile) => [profile.id, 1 / (1 + (clientHeat[profile.id] ?? 0))] as [string, number]),
     )
     const profile = state.clients.find((candidate) => candidate.id === clientId) ?? pool[0]
-    const [units, afterUnits] = randomInt(rng, informed ? 3 : 1, informed ? 5 : 4)
+    const [units, afterUnits] = randomInt(
+      rng,
+      informed ? Math.max(1, tier.clientUnitsMin + 1) : tier.clientUnitsMin,
+      informed ? tier.clientUnitsMax + 1 : Math.max(tier.clientUnitsMin, tier.clientUnitsMax),
+    )
     rng = afterUnits
     const [noteRoll, afterNote] = nextRandom(rng)
     rng = afterNote
@@ -1189,9 +1343,10 @@ export function stepSession(state: SimulationState): SimulationState {
     ]
     nextDispatchAt =
       simSeconds +
-      (informed
-        ? INFORMED_INTERVAL_MIN + Math.round(typeRoll * (INFORMED_INTERVAL_MAX - INFORMED_INTERVAL_MIN))
-        : DISPATCH_INTERVAL)
+      intervalMultiplier *
+        (informed
+          ? INFORMED_INTERVAL_MIN + Math.round(typeRoll * (INFORMED_INTERVAL_MAX - INFORMED_INTERVAL_MIN))
+          : DISPATCH_INTERVAL)
   }
 
   /* 5. 遥测采样：每帧记一次敞口与 P&L，维护峰值/最大回撤 */
@@ -1244,6 +1399,7 @@ export function stepSession(state: SimulationState): SimulationState {
     history,
     agents,
     dealerQuotes,
+    drainUntilTick: drainUntilTick > tick ? drainUntilTick : 0,
   }
 }
 
@@ -1328,8 +1484,13 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
   const rfq = input.rfqId ? state.dispatch.find((item) => item.id === input.rfqId) : undefined
   const clientSide = rfq?.side ?? 'SELL'
   const qty = rfq?.qty ?? Math.max(500, Math.round((input.bidVolume + input.offerVolume) / 4))
+  const ourSide: Side = clientSide === 'SELL' ? 'BUY' : 'SELL'
+  const ourPrice = ourSide === 'BUY' ? input.bid : input.offer
+  /* 报价也是一种风险承诺：这张单全部成交后会突破档位的单名/总敞口上限就不报 */
+  const riskBreach = riskLimitBreach(state, input.symbol, ourSide, qty, ourPrice)
+  if (riskBreach) return { state, message: riskBreach }
   /* 客户卖给我们 = 我们要拿现金接货，接不下就别报价 */
-  if (clientSide === 'SELL' && qty * input.bid * (1 + COMMISSION_RATE) > state.cash) {
+  if (clientSide === 'SELL' && qty * input.bid * (1 + commissionOf(state)) > state.cash) {
     return {
       state,
       message: `QUOTE REJECTED · buying ${qty.toLocaleString('en-US')} would exceed the cash budget`,
@@ -1340,8 +1501,11 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
   /* 报价不是点一下就到位：先在路上待 1–3 个 tick，能被抢跑 */
   const [latencyTicks, afterLatency] = randomInt(rng, 1, 3)
   rng = afterLatency
-  /** "Valid for" 用模拟秒表示；按 tick 折算，最少 6 个 tick，保证能看到 LIVE 与排队 */
-  const ttlTicks = Math.min(40, Math.max(6, Math.round(input.validFor / 10)))
+  /** "Valid for" 用模拟秒表示；按 tick 折算并按难度档位缩放（越难，报价越容易失效） */
+  const ttlTicks = Math.min(
+    40,
+    Math.max(4, Math.round((input.validFor / 10) * tierOf(state).quoteTtlMult)),
+  )
   const marketBook = state.instruments.find((item) => item.symbol === input.symbol)?.book
   const liveSpread = marketBook ? round2(marketBook.asks[0].price - marketBook.bids[0].price) : 0
   const ourSpread = round2(input.offer - input.bid)
@@ -1369,6 +1533,7 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     queueTicks: 0,
     queueAhead: 0,
     filledQty: 0,
+    createdTick: state.tick,
     spreadRatio,
     fillProbability: fillProbability(spreadRatio),
     rfqId: rfq?.id,
@@ -1422,7 +1587,7 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
   }
   const ourSide: Side = input.clientSide === 'SELL' ? 'BUY' : 'SELL'
   const gross = input.qty * input.price
-  const fee = round2(gross * COMMISSION_RATE)
+  const fee = round2(gross * commissionOf(state))
   if (ourSide === 'BUY' && gross + fee > state.cash) {
     const need = Math.ceil(gross + fee).toLocaleString('en-US')
     const have = Math.floor(state.cash).toLocaleString('en-US')
@@ -1517,6 +1682,37 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
     return { state, message: `EXCHANGE REJECTED · only ${available} ${input.symbol} on the book` }
   }
 
+  const tier = tierOf(state)
+  /* 难度档位的工具限制：单笔上限、只能减仓的委托、以及不能裸空 */
+  if (qty > tier.maxExchangeQty) {
+    return {
+      state,
+      message: `EXCHANGE LIMIT · this mandate caps a single order at ${tier.maxExchangeQty.toLocaleString(
+        'en-US',
+      )} shares`,
+    }
+  }
+  if (tier.maxExchangeBookShare < 1 && qty > Math.floor(liquidity * tier.maxExchangeBookShare)) {
+    return {
+      state,
+      message: `EXCHANGE LIMIT · this mandate lets you take at most ${Math.round(
+        tier.maxExchangeBookShare * 100,
+      )}% of the visible book`,
+    }
+  }
+  const heldQty = state.positions.find((position) => position.symbol === input.symbol)?.netQty ?? 0
+  if (state.role === 'sales' && !tier.allowShort && input.side === 'SELL' && heldQty < qty) {
+    return { state, message: 'NO SHORTING · retail accounts can only sell what they already hold' }
+  }
+  const reducesRisk =
+    input.side === 'BUY' ? heldQty < 0 : heldQty > 0
+  if (tier.exchangeMode === 'reduce-only' && !reducesRisk) {
+    return {
+      state,
+      message: 'EXCHANGE LIMIT · this mandate only lets the desk reduce risk on the exchange',
+    }
+  }
+
   /* 成交价 = 这个角色在面板 5 上看到的买/卖价；MM 的双边价更紧，Sales 更宽 */
   const preview = venuePricePreview(state, input.symbol)
   const price = input.side === 'BUY' ? preview.buy : preview.sell
@@ -1524,12 +1720,14 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
   if (!(price > 0)) return { state, message: 'EXCHANGE REJECTED · no market right now' }
 
   const gross = qty * price
-  const fee = round2(gross * COMMISSION_RATE)
+  const fee = round2(gross * commissionOf(state))
   if (input.side === 'BUY' && gross + fee > state.cash) {
     const need = Math.ceil(gross + fee).toLocaleString('en-US')
     const have = Math.floor(state.cash).toLocaleString('en-US')
     return { state, message: `EXCHANGE REJECTED · insufficient cash (need $${need}, have $${have})` }
   }
+  const riskBreach = riskLimitBreach(state, input.symbol, input.side, qty, price)
+  if (riskBreach) return { state, message: riskBreach }
 
   const positions = applyPositionFill(state.positions, input.symbol, input.side, qty, price)
   /* 做市商提供流动性，自己下单对市场的冲击小一些；Sales 主动吃单，冲击全额 */
@@ -1630,24 +1828,32 @@ export function requestDealerQuote(state: SimulationState, input: DealerRequestI
   if (!(mid > 0)) return { state, message: 'RFQ REJECTED · no market right now' }
 
   const volatility = instrumentVolatility(state, input.symbol)
-  const base = dealerGap(volatility)
+  const tier = tierOf(state)
+  const base = dealerGap(volatility) * tier.dealerGapMult
   let rng = state.rng
   let seq = state.counters.dealerQuote
   const created: DealerQuote[] = []
-  for (const dealer of DEALERS) {
+  /* 高档位：dealer 更少、会掉线、回价更慢也更短命 */
+  const roster = DEALERS.slice(0, Math.max(1, Math.min(DEALERS.length, tier.dealerCount)))
+  for (const dealer of roster) {
     const [latencyRoll, afterLatency] = nextRandom(rng)
     const [widthRoll, afterWidth] = nextRandom(afterLatency)
     const [skewRoll, afterSkew] = nextRandom(afterWidth)
     const [sizeRoll, afterSize] = nextRandom(afterSkew)
     const [ttlRoll, afterTtl] = nextRandom(afterSize)
-    rng = afterTtl
-    seq += 1
-    const latency = dealer.latency + (latencyRoll > 0.6 ? 1 : 0)
+    const [dropRoll, afterDrop] = nextRandom(afterTtl)
+    rng = afterDrop
+    const latency = dealer.latency + tier.dealerLatencyBonus + (latencyRoll > 0.6 ? 1 : 0)
     const gap = base * dealer.width * (0.85 + widthRoll * 0.3)
     /* 每家 dealer 会把自己的双边价整体抬一点或压一点，模拟不同库存/看法 */
     const skew = (skewRoll - 0.5) * gap * 0.3
     const bid = round2(mid * (1 - gap / 2) + skew)
     const offer = round2(Math.max(bid + 0.01, mid * (1 + gap / 2) + skew))
+    /* dealer 掉线：这一家不回价（高档位会出现） */
+    if (tier.dealerDowntime > 0 && dropRoll < tier.dealerDowntime / Math.max(1, tier.dealerDowntime + 1)) {
+      continue
+    }
+    seq += 1
     const size = Math.max(
       instrument.lot,
       Math.round((qty * (0.5 + sizeRoll * 0.8)) / instrument.lot) * instrument.lot,
@@ -1664,7 +1870,7 @@ export function requestDealerQuote(state: SimulationState, input: DealerRequestI
       offer,
       size,
       readyAt: state.tick + latency,
-      expiresAt: state.tick + latency + 8 + Math.round(ttlRoll * 8),
+      expiresAt: state.tick + latency + Math.round((8 + ttlRoll * 8) * tier.dealerValidityMult),
     })
   }
 
@@ -1675,7 +1881,7 @@ export function requestDealerQuote(state: SimulationState, input: DealerRequestI
       counters: { ...state.counters, dealerQuote: seq },
       dealerQuotes: [...state.dealerQuotes, ...created].slice(-18),
     },
-    message: `RFQ SENT · ${input.side} ${qty.toLocaleString('en-US')} ${input.symbol} · ${DEALERS.length} dealers calling back`,
+    message: `RFQ SENT · ${input.side} ${qty.toLocaleString('en-US')} ${input.symbol} · ${created.length} dealers calling back`,
   }
 }
 
@@ -1698,14 +1904,21 @@ export function hitDealerQuote(state: SimulationState, input: DealerHitInput): A
 
   const qty = Math.min(quote.size, Math.trunc(input.qty ?? quote.size))
   if (!(qty > 0)) return { state, message: 'DEALER REJECTED · quantity must be positive' }
+  const tier = tierOf(state)
+  const heldQty = state.positions.find((position) => position.symbol === quote.symbol)?.netQty ?? 0
+  if (state.role === 'sales' && !tier.allowShort && input.side === 'SELL' && heldQty < qty) {
+    return { state, message: 'NO SHORTING · retail accounts can only sell what they already hold' }
+  }
   const price = input.side === 'BUY' ? quote.offer : quote.bid
   const gross = qty * price
-  const fee = round2(gross * COMMISSION_RATE)
+  const fee = round2(gross * commissionOf(state))
   if (input.side === 'BUY' && gross + fee > state.cash) {
     const need = Math.ceil(gross + fee).toLocaleString('en-US')
     const have = Math.floor(state.cash).toLocaleString('en-US')
     return { state, message: `DEALER REJECTED · insufficient cash (need $${need}, have $${have})` }
   }
+  const riskBreach = riskLimitBreach(state, quote.symbol, input.side, qty, price)
+  if (riskBreach) return { state, message: riskBreach }
 
   const mid = bookMid(instrument.book)
   const positions = applyPositionFill(state.positions, quote.symbol, input.side, qty, price)
@@ -1773,19 +1986,27 @@ export function selectDealerQuotes(state: SimulationState): DealerQuote[] {
 export function declineDispatch(state: SimulationState, rfqId: string): ActionResult {
   const rfq = state.dispatch.find((item) => item.id === rfqId)
   if (!rfq) return { state, message: 'DISPATCH NOT FOUND' }
+  const tier = tierOf(state)
+  const declines = (state.declines ?? 0) + 1
+  /* 超过档位配额后，每拒一单客户的怨气涨得更快；配额内是正常的礼貌拒绝 */
+  const overQuota = tier.declineQuota !== null && declines > tier.declineQuota
+  const heatStep = 0.8 + (overQuota ? tier.declineHeat : 0)
   /* 拒单留下怨气：这位客户接下来更可能去找别家，派单权重下降 */
   const clientHeat = {
     ...state.clientHeat,
-    [rfq.client]: Math.min(3, round2((state.clientHeat[rfq.client] ?? 0) + 0.8)),
+    [rfq.client]: Math.min(3, round2((state.clientHeat[rfq.client] ?? 0) + heatStep)),
   }
   return {
     state: {
       ...state,
       clientHeat,
+      declines,
       dispatch: state.dispatch.filter((item) => item.id !== rfqId),
       telemetry: recordDecline(state.telemetry),
     },
-    message: `DISPATCH DECLINED · ${rfq.id} ${rfq.client}`,
+    message: overQuota
+      ? `DISPATCH DECLINED · ${rfq.id} ${rfq.client} · over the decline quota`
+      : `DISPATCH DECLINED · ${rfq.id} ${rfq.client}`,
   }
 }
 

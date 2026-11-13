@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import type { Book, Instrument, Role, Side } from '../types'
 import {
-  COMMISSION_RATE,
   exchangeLiquidity,
   type ExchangeTradeInput,
   type VenuePricePreview,
 } from '../engine/simulation'
+import type { DifficultyTier } from '../engine/difficulty'
 import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
 
@@ -19,6 +19,10 @@ interface ExchangeTicketProps {
   role: Role
   /** 这个角色当前的买入价 / 卖出价 / 双边差距，由引擎的 venuePricePreview 算好 */
   preview: VenuePricePreview
+  /** 当前难度档位：手续费、单笔上限、做空/减仓权限都由它决定 */
+  tier: DifficultyTier
+  /** 当前标的的净持仓（用来判断减仓/做空权限） */
+  netQty: number
   /** 返回结果文案，显示在票据下方 */
   onTrade: (input: ExchangeTradeInput) => string
 }
@@ -37,6 +41,8 @@ export default function ExchangeTicket({
   cash,
   role,
   preview,
+  tier,
+  netQty,
   onTrade,
 }: ExchangeTicketProps) {
   const t = useT()
@@ -49,9 +55,17 @@ export default function ExchangeTicket({
   const liquidity = exchangeLiquidity(levels)
   const price = side === 'BUY' ? preview.buy : preview.sell
   const notional = requested > 0 && price > 0 ? requested * price : 0
-  const commission = notional * COMMISSION_RATE
+  const commission = notional * tier.commissionRate
   const roundTrip = preview.gapPoints * Math.max(0, requested) + commission * 2
-  const canTrade = requested > 0 && price > 0 && requested <= liquidity
+  /* 单笔上限由档位决定；盘口可成交量也要够，否则点下去只会拿到拒单 */
+  const capHit = requested > tier.maxExchangeQty
+  /* 权限：reduce-only 档只能减仓；不允许做空时卖出量不能超过持仓 */
+  const reduces = side === 'BUY' ? netQty < 0 : netQty > 0
+  const mandateBlocked =
+    tier.exchangeMode === 'reduce-only'
+      ? !reduces
+      : !tier.allowShort && side === 'SELL' && requested > Math.max(0, netQty)
+  const canTrade = requested > 0 && price > 0 && requested <= liquidity && !capHit && !mandateBlocked
 
   const submit = () => {
     setFlash(onTrade({ symbol: instrument.symbol, side, qty: requested }))
@@ -64,7 +78,14 @@ export default function ExchangeTicket({
         title={t('EXCHANGE')}
         right={
           <span className="panel__meta">
-            {instrument.symbol} · {t(role === 'sales' ? 'TAKER PRICE' : 'MAKER PRICE')}
+            {instrument.symbol} · {t(role === 'sales' ? 'TAKER PRICE' : 'MAKER PRICE')} ·{' '}
+            {t(
+              tier.exchangeMode === 'reduce-only'
+                ? 'REDUCE ONLY'
+                : tier.allowShort
+                  ? 'FULL ACCESS'
+                  : 'NO SHORTING',
+            )}
           </span>
         }
       />
@@ -95,6 +116,9 @@ export default function ExchangeTicket({
               className="field__input"
               inputMode="numeric"
               aria-label={t('Exchange quantity')}
+              title={t('This mandate caps a single order at {n} shares', {
+                n: tier.maxExchangeQty.toLocaleString('en-US'),
+              })}
               value={qty}
               onChange={(event) => setQty(event.target.value)}
             />

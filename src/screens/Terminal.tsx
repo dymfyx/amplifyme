@@ -27,6 +27,8 @@ import {
   type SessionMinutes,
 } from '../engine/simulation'
 import type { Scenario } from '../engine/scenarios'
+import type { DifficultyTier } from '../engine/difficulty'
+import { evaluateSession } from '../engine/evaluation'
 import {
   adviceFor,
   coachingSummary,
@@ -71,6 +73,8 @@ interface TerminalProps {
   minutes?: SessionMinutes
   /** 本局的情景剧本：新闻时间轴、价差/流动性系数都由它决定 */
   scenario: Scenario
+  /** 这一局的难度档位：点差、手续费、限额与人机强度都由它决定 */
+  tier: DifficultyTier
   /** 训练模式：这一局对应的 drill（盘中 HUD 与结算判定都用它） */
   drill?: Drill | null
   /** 该 drill 的历史记录：结算时用来显示尝试/通过次数 */
@@ -90,6 +94,7 @@ export default function Terminal({
   seed = null,
   minutes = DEFAULT_MINUTES,
   scenario,
+  tier,
   drill = null,
   drillRecord = null,
   onDrillResult,
@@ -98,8 +103,10 @@ export default function Terminal({
   onExit,
 }: TerminalProps) {
   const t = useT()
-  const [initial] = useState(() => createSession(seed ?? undefined, openingBook, { minutes, scenario, role }))
-  const simulation = useSimulation(initial, openingBook, seed, minutes, scenario, role)
+  const [initial] = useState(() =>
+    createSession(seed ?? undefined, openingBook, { minutes, scenario, role, tier }),
+  )
+  const simulation = useSimulation(initial, openingBook, seed, minutes, scenario, role, tier)
   const { state } = simulation
 
   const [selected, setSelected] = useState('AZN')
@@ -124,6 +131,11 @@ export default function Terminal({
   const cash = selectCash(state)
   const dealerQuotes = selectDealerQuotes(state)
   const venuePreview = venuePricePreview(state, selected)
+  const instrumentPosition = positions.find((item) => item.symbol === selected)?.netQty ?? 0
+  /* 高档位的成交率只是估算，屏幕上会轻微抖动 */
+  const fillJitter = tier.estFillJitter
+    ? Math.sin(state.tick * 0.7) * tier.estFillJitter
+    : 0
   const score = scoreSession(state)
   const settlement = selectSettlement(state)
   const coaching = coachingSummary(state)
@@ -135,6 +147,7 @@ export default function Terminal({
   const closed = state.status === 'CLOSED'
   const review = decisionReview(state)
   const scenarioMeta = selectScenario(state)
+  const verdict = evaluateSession(state)
   const history = selectHistory(state)
   const agents = selectAgents(state)
   /* 每次结算写一条本地存档：同 seed/剧本/时长且同一收盘点的重复渲染只写一次 */
@@ -166,6 +179,7 @@ export default function Terminal({
       scenarioId: scenarioMeta.id,
       scenarioName: scenarioMeta.name,
       minutes: meta.minutes,
+      tier: tier.id,
       seed: meta.seed,
       total: settlement.total,
       realised: settlement.realised,
@@ -280,6 +294,7 @@ export default function Terminal({
         sharedSeed={seed}
         minutes={meta.minutes}
         timeLeftMs={meta.timeLeftMs}
+        difficulty={t(tier.name)}
         onOpenScore={() => setScoreOpen(true)}
         onOpenReplay={() => setReplayOpen(true)}
         onOpenFlow={() => setFlowOpen(true)}
@@ -316,6 +331,7 @@ export default function Terminal({
               quotes={state.quotes}
               recentFills={state.trades}
               cash={cash}
+              fillJitter={fillJitter}
               onQuote={handleQuote}
               onFill={handleFill}
               onDecline={handleDecline}
@@ -336,6 +352,8 @@ export default function Terminal({
             cash={cash}
             role={role}
             preview={venuePreview}
+            tier={tier}
+            netQty={instrumentPosition}
             onTrade={handleExchangeTrade}
           />
           <ChartPanel
@@ -391,6 +409,8 @@ export default function Terminal({
           score={score}
           coaching={coachingText}
           review={review}
+          verdict={verdict}
+          tierName={t(tier.name)}
           scenarioName={t(scenarioMeta.name)}
           drill={drill}
           drillProgress={progress}

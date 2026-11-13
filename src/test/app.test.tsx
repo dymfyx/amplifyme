@@ -571,3 +571,54 @@ describe('training mode', () => {
     expect(screen.getByText(/ATTEMPTS 1/)).toBeInTheDocument()
   })
 })
+
+describe('difficulty tiers', () => {
+  it('offers four difficulty chips per desk on the entry screen', () => {
+    render(<App />)
+    for (const desk of ['Sales', 'Market Maker'] as const) {
+      for (const tier of ['Retail punter', 'Fast money', 'Venture desk', 'Black-swan fund']) {
+        if (desk === 'Market Maker') continue
+        expect(screen.getByRole('button', { name: `${desk} difficulty: ${tier}` })).toBeInTheDocument()
+      }
+    }
+    for (const tier of ['Retail shop', 'Bank desk', 'Private fund', 'Jiangyi fund']) {
+      expect(
+        screen.getByRole('button', { name: `Market Maker difficulty: ${tier}` }),
+      ).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Sales difficulty: Fast money' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('carries the picked tier into the session and the top bar', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sales difficulty: Venture desk' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Sales' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Sales desk' }))
+
+    expect(screen.getByText('Venture desk')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'DEALER QUOTES' })).toBeInTheDocument()
+  })
+
+  it('boots a tier straight from the url hash', () => {
+    window.location.hash = '#market-maker?tier=4'
+    render(<App />)
+    expect(screen.getByText('Jiangyi fund')).toBeInTheDocument()
+    expect(screen.getByText(/REDUCE ONLY/)).toBeInTheDocument()
+  })
+
+  it('reports a session verdict with behaviour tags at the close', () => {
+    window.location.hash = '#sales?minutes=5&seed=7'
+    render(<App />)
+
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+
+    expect(screen.getByText('SESSION VERDICT')).toBeInTheDocument()
+    expect(screen.getByText('BEHAVIOUR TAGS')).toBeInTheDocument()
+    expect(screen.getAllByText(/SESSION COMPLETE/).length).toBeGreaterThan(0)
+  })
+})

@@ -36,6 +36,8 @@ interface TopBarProps {
   minutes: SessionMinutes
   /** 剩余真实时间（毫秒） */
   timeLeftMs: number
+  /** 当前难度档位名（显示在倒计时旁边） */
+  difficulty?: string
   onOpenScore: () => void
   onOpenReplay: () => void
   onOpenFlow: () => void
@@ -54,6 +56,7 @@ export default function TopBar({
   sharedSeed,
   minutes,
   timeLeftMs,
+  difficulty,
   onOpenScore,
   onOpenReplay,
   onOpenFlow,
@@ -106,6 +109,11 @@ export default function TopBar({
           <span className="topbar__clock-value">{fmtLeft(timeLeftMs)}</span>
           <span className="topbar__clock-tier">{t('{minutes} MIN', { minutes })}</span>
         </span>
+        {difficulty ? (
+          <span className="topbar__shared" title={`Difficulty tier: ${difficulty}`}>
+            {difficulty}
+          </span>
+        ) : null}
         {sharedSeed !== null && (
           <span
             className="topbar__shared"

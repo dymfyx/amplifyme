@@ -22,6 +22,8 @@ export interface ArchivedSession {
   scenarioId: string
   scenarioName: string
   minutes: 5 | 15 | 30
+  /** 难度档位 1-4（旧存档没有这个字段） */
+  tier?: number
   seed: number
   total: number
   realised: number
@@ -45,6 +47,8 @@ export interface ArchiveSettings {
   language: 'en' | 'zh'
   minutes: 5 | 15 | 30
   scenarioId: string
+  /** 每个台面各自记住的难度档位 */
+  tiers?: Record<ArchiveDesk, number>
 }
 
 export interface ArchiveFile {
@@ -66,10 +70,13 @@ const MAX_SESSIONS = 100
 /** 读写探针用的临时 key */
 const PROBE_KEY = `${ARCHIVE_KEY}.probe`
 
+const DEFAULT_TIERS: Record<ArchiveDesk, number> = { sales: 2, 'market-maker': 2 }
+
 const DEFAULT_SETTINGS: ArchiveSettings = {
   language: 'en',
   minutes: 30,
   scenarioId: 'classic',
+  tiers: { ...DEFAULT_TIERS },
 }
 
 type JsonRecord = Record<string, unknown>
@@ -113,6 +120,7 @@ const copySettings = (settings: ArchiveSettings): ArchiveSettings => ({
   language: settings.language,
   minutes: settings.minutes,
   scenarioId: settings.scenarioId,
+  tiers: { ...(settings.tiers ?? DEFAULT_TIERS) },
 })
 
 interface SettingsResult {
@@ -134,7 +142,24 @@ const validateSettings = (value: unknown): SettingsResult => {
   if (!isNonEmptyString(scenarioId)) {
     return { error: 'Archive settings "scenarioId" must be a non-empty string' }
   }
-  return { settings: { language, minutes, scenarioId } }
+  const tiers = validateTiers(value.tiers)
+  if (!tiers) {
+    return { error: 'Archive settings "tiers" must map both desks to a tier between 1 and 4' }
+  }
+  return { settings: { language, minutes, scenarioId, tiers } }
+}
+
+const isTierId = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 4
+
+/** 每台面的难度档位；旧存档没有这个字段时回落到默认档 */
+const validateTiers = (value: unknown): Record<ArchiveDesk, number> | null => {
+  if (value === undefined) return { ...DEFAULT_TIERS }
+  if (!isRecord(value)) return null
+  const sales = value.sales
+  const maker = value['market-maker']
+  if (!isTierId(sales) || !isTierId(maker)) return null
+  return { sales, 'market-maker': maker }
 }
 
 interface SessionResult {
@@ -216,6 +241,7 @@ const validateSession = (value: unknown, index: number): SessionResult => {
       scenarioId,
       scenarioName,
       minutes,
+      tier: isTierId(value.tier) ? value.tier : undefined,
       seed: value.seed as number,
       total: value.total as number,
       realised: value.realised as number,

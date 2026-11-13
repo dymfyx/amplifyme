@@ -466,3 +466,24 @@ The entry screen has a MODE toggle: `SIMULATE` is the free-form desk, `TRAIN` sw
 | Two venues | Sales | 5501 | Classic | 2+ dealer fills and alpha vs buy & hold > $0 |
 
 While a drill runs a `TRAIN` strip sits under the top bar with its live metrics (`current / target`, green when the bar is met). The settlement report puts the verdict card right under the benchmark: `PASSED` / `FAILED`, one row per criterion, `ATTEMPTS n · PASSED m`, plus `RETRY DRILL` and `BACK TO DRILLS`. Attempts and best composite live in `market-sim.drills.v1` in localStorage; the drill picker shows the record on each card.
+
+## Difficulty tiers
+
+Both desks ship four presets. The tier you pick on the entry card is stored per desk, carried on the link (`&tier=1..4`) and saved with the session, so the group can compare like for like. Tier 2 is the reference book and is identical to the old behaviour; tier 1 is forgiving, tier 4 is the house at its sharpest.
+
+| Sales | MM | Commission | News vol | Headlines | Agent skill | Informed flow | Per-name / gross limit | Mandate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Retail punter | Retail shop | 3 bps | x0.7 | 16 | 0.6 | 45% | $4m / $8m | no shorting, 1,000-share orders |
+| Fast money | Bank desk | 5 bps | x1.0 | 20 | 1.0 | 55% | $10m / $18m | full tools |
+| Venture desk | Private fund | 6.5 bps | x1.25 | 22 | 1.35 | 70% | $14m / $24m | full tools, bigger tickets |
+| Black-swan fund | Jiangyi fund | 8 bps | x1.6 | 24 | 1.7 | 85% | $18m / $28m | exchange is reduce-only, one decline before the desk remembers |
+
+Every tier is a row in `src/engine/difficulty.ts` (`SALES_TIERS`, `MAKER_TIERS`) and drives more than the table above: dealer count/latency/validity, taker vs maker gap multipliers, quote TTL, queue decay (how fast the book eats your resting quote), width penalty, `EST. FILL` jitter, sniping chance on stale quotes, post-fill adverse drift, decline quota and heat. Sales tiers also face liquidity drains on tier 4; MM tiers face faster client flow and bigger tickets. Nothing is fake-hard: same book, same commissions model, same impact model — the tier only changes who you are and who you trade against.
+
+Risk limits reject new risk: `RISK LIMIT · AZN net exposure would exceed $10m`. The exchange ticket prints the mandate next to the symbol (`FULL ACCESS`, `REDUCE ONLY`, `NO SHORTING`) and blocks orders that break it.
+
+### Session verdict
+
+Scoring itself never changes with the tier (no difficulty coefficient). What changes is the closing note: `SESSION VERDICT` under the benchmark shows the band (`elite / strong / solid / snark / brutal` from the composite), up to six behaviour tags picked from what actually happened (`Decisive`, `Patient`, `Chasing the tape`, `Steady book`, `Holding losers`, `Overtrading`, `Headline hunter`, `Contrarian`) and one line of feedback. Below 60 the tone turns snarky; it only ever describes this session's decisions, never the person.
+
+Training drills pin their own tier (most are tier 2, `Adverse selection` is tier 3), so a pass is a comparable pass.
