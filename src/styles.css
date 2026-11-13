@@ -2367,3 +2367,42 @@ table.grid.grid--setup tbody tr:last-child td {
 .role-select__archive:focus-visible {
   color: var(--text-1);
 }
+
+/* Role-specific pricing and dealer quotes (P2.13) */
+.badge--dealer {
+  color: #c9a7ff;
+  border-color: rgba(201, 167, 255, 0.45);
+}
+
+.btn--tiny {
+  padding: 2px 7px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.dealer__prices {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 2px;
+}
+
+.dealer__spread {
+  color: var(--text-2);
+  font-size: 9px;
+}
+
+.dispatch--calling {
+  opacity: 0.55;
+}
+
+.dispatch__empty {
+  padding: 10px 8px;
+  color: var(--text-2);
+  font-size: 10px;
+}
+.ticket__flash--warn {
+  border-left-color: var(--warn);
+  background: rgba(245, 166, 35, 0.08);
+  color: var(--warn);
+}

@@ -53,8 +53,13 @@ export interface SettlementStats {
   clientFills: number
   /** 自己在交易所主动成交笔数 */
   exchangeFills: number
+  /** 打 dealer 回价成交的笔数（Sales 的主要成交方式） */
+  dealerFills: number
   clientNotional: number
   exchangeNotional: number
+  dealerNotional: number
+  /** 主动成交（dealer + exchange）相对中间价的平均优劣，正数 = 买在 mid 下方 / 卖在 mid 上方（bps） */
+  entryEdgeBps: number
   /** 价差捕获：客户流 edge 金额 + 交易所成交 edge 金额（主动吃单通常为负） */
   spreadCapture: number
   /** 基准策略（五只股票等权买入并持有）的盈亏，用于结算时对比 */
@@ -74,9 +79,16 @@ export function selectSettlement(state: SimulationState): SettlementStats {
   /* 客户流成交和交易所主动成交分开统计：前者赚价差，后者付价差 */
   const clientFills = telemetry.fills.filter((fill) => fill.venue === 'client')
   const exchangeFills = telemetry.fills.filter((fill) => fill.venue === 'exchange')
+  const dealerFills = telemetry.fills.filter((fill) => fill.venue === 'dealer')
+  const ownFills = telemetry.fills.filter((fill) => fill.venue !== 'client')
   const fillEdges = clientFills.map((fill) => fill.edge)
   const clientNotional = clientFills.reduce((total, fill) => total + fill.notional, 0)
   const exchangeNotional = exchangeFills.reduce((total, fill) => total + fill.notional, 0)
+  const dealerNotional = dealerFills.reduce((total, fill) => total + fill.notional, 0)
+  const entryEdgeBps =
+    ownFills.length === 0
+      ? 0
+      : round1(mean(ownFills.map((fill) => (fill.edge / Math.max(0.01, fill.mid)) * 10_000)))
   const spreadCapture = Math.round(
     telemetry.fills.reduce((total, fill) => total + fill.edge * fill.qty, 0),
   )
@@ -112,8 +124,11 @@ export function selectSettlement(state: SimulationState): SettlementStats {
     headlinesAnswered: telemetry.news.filter((item) => item.traded).length,
     clientFills: clientFills.length,
     exchangeFills: exchangeFills.length,
+    dealerFills: dealerFills.length,
     clientNotional: Math.round(clientNotional),
     exchangeNotional: Math.round(exchangeNotional),
+    dealerNotional: Math.round(dealerNotional),
+    entryEdgeBps,
     spreadCapture,
     ...benchmark(state),
   }
@@ -179,22 +194,41 @@ export function scoreSession(state: SimulationState): ScoreCard {
   const adaptability =
     telemetry.news.length === 0 ? 50 : clamp(35 + 65 * (answered / telemetry.news.length))
 
-  const dimensions: ScoreDimension[] = [
-    { key: 'returns', label: 'RETURNS', value: round1(returns) },
-    { key: 'discipline', label: 'DISCIPLINE', value: round1(discipline) },
-    { key: 'reaction', label: 'REACTION', value: round1(reaction) },
-    { key: 'resilience', label: 'RESILIENCE', value: round1(resilience) },
-    { key: 'management', label: 'TRADE MANAGEMENT', value: round1(management) },
-    { key: 'adaptability', label: 'ADAPTABILITY', value: round1(adaptability) },
-  ]
+  /* Sales 不报价，评价的是「抓机会 + 进场质量」；MM 仍看报价纪律与客户流 */
+  const ownFills = telemetry.fills.filter((fill) => fill.venue !== 'client')
+  const entryBps =
+    ownFills.length === 0
+      ? 0
+      : mean(ownFills.map((fill) => (fill.edge / Math.max(0.01, fill.mid)) * 10_000))
+  const entry = clamp(50 + entryBps * 8)
+  const risk = clamp(100 - drawdownPct * 30)
+
+  const dimensions: ScoreDimension[] =
+    state.role === 'sales'
+      ? [
+          { key: 'returns', label: 'RETURNS', value: round1(returns) },
+          { key: 'entry', label: 'ENTRY VS MID', value: round1(entry) },
+          { key: 'reaction', label: 'REACTION', value: round1(reaction) },
+          { key: 'resilience', label: 'RISK', value: round1(risk) },
+        ]
+      : [
+          { key: 'returns', label: 'RETURNS', value: round1(returns) },
+          { key: 'discipline', label: 'DISCIPLINE', value: round1(discipline) },
+          { key: 'reaction', label: 'REACTION', value: round1(reaction) },
+          { key: 'resilience', label: 'RESILIENCE', value: round1(resilience) },
+          { key: 'management', label: 'TRADE MANAGEMENT', value: round1(management) },
+          { key: 'adaptability', label: 'ADAPTABILITY', value: round1(adaptability) },
+        ]
 
   const composite = round1(
-    returns * 0.25 +
-      discipline * 0.2 +
-      reaction * 0.15 +
-      resilience * 0.15 +
-      management * 0.15 +
-      adaptability * 0.1,
+    state.role === 'sales'
+      ? returns * 0.4 + entry * 0.3 + reaction * 0.2 + risk * 0.1
+      : returns * 0.25 +
+          discipline * 0.2 +
+          reaction * 0.15 +
+          resilience * 0.15 +
+          management * 0.15 +
+          adaptability * 0.1,
   )
   const percentile = Math.round(clamp(5 + composite * 0.9, 1, 99))
 
@@ -204,6 +238,7 @@ export function scoreSession(state: SimulationState): ScoreCard {
 /** 结算报告里的点评：最强/最弱维度 + 针对最弱维度的建议（文案由 UI 翻译） */
 export type AdviceKey =
   | 'returns'
+  | 'entry'
   | 'discipline'
   | 'reaction'
   | 'resilience'
@@ -229,6 +264,8 @@ export function adviceFor(key: AdviceKey): string {
   switch (key) {
     case 'returns':
       return 'size up the good trades and cut the ones that go against you early.'
+    case 'entry':
+      return 'ask two dealers and wait for a price near the mid instead of taking the first one.'
     case 'discipline':
       return 'quote closer to the market spread instead of shading every price.'
     case 'reaction':

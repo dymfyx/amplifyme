@@ -13,6 +13,12 @@ export const zhChrome: Record<string, string> = {
   'S&T · SALES': '销售交易 · 销售',
   Sales: '销售',
   'Client flow & execution': '客户流与执行',
+  'Buy-side execution & RFQ': '买方执行与询价',
+  'Shop three dealers for a price, trade the exchange yourself and beat the mid — and the benchmark.':
+    '同时向三家交易对手询价，也可以在交易所自己买卖；进价要贴近中间价，并且跑赢基准。',
+  'Ask three dealers for a two-way price': '同时向三家交易对手要双边价',
+  'Hit the best dealer quote or take liquidity': '打最划算的回价，或直接吃盘口',
+  'Trade the exchange at a taker price and beat it': '在交易所按主动成交价买卖，把它赚回来',
   'Take system-dispatched client orders, price them against your book and keep the desk in the black.':
     '接系统派发的客户订单，按自己的库存报价，让交易台保持盈利。',
   'Receive auto-routed client orders': '接收自动路由的客户订单',
@@ -105,6 +111,8 @@ export const zhChrome: Record<string, string> = {
   DISCIPLINE: '纪律',
   REACTION: '反应',
   RESILIENCE: '抗压',
+  'ENTRY VS MID': '进场相对中间价',
+  RISK: '风险',
   'TRADE MANAGEMENT': '交易管理',
   ADAPTABILITY: '适应',
   "Live read from this session's decision telemetry — every quote, fill and headline response feeds it. Press ESC to close.":
@@ -149,6 +157,8 @@ export const zhChrome: Record<string, string> = {
   'Strongest: {best}. Weakest: {worst} — {advice}': '最强：{best}。最弱：{worst} —— {advice}',
   'size up the good trades and cut the ones that go against you early.': '放大顺势的交易，及早砍掉走反的仓位。',
   'quote closer to the market spread instead of shading every price.': '报价更贴近市场价差，别每笔都压价。',
+  'ask two dealers and wait for a price near the mid instead of taking the first one.': '多问两家，等到接近中间价的报价再动手，别第一口就吃。',
+  'take at least two dealer fills and still come out ahead.': '至少打两笔交易对手的价，并且整局仍然跑赢。',
   'answer RFQs faster — the first few seconds decide whether you keep the flow.':
     '更快回应询价 —— 最初几秒决定你能否留住这笔流。',
   'flatten inventory after a drawdown instead of doubling down.': '回撤后先平库存，而不是加倍下注。',

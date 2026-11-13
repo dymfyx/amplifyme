@@ -23,12 +23,12 @@ const ROLE_OPTIONS: RoleOption[] = [
     id: 'sales',
     tag: 'S&T · SALES',
     title: 'Sales',
-    subtitle: 'Client flow & execution',
-    blurb: 'Take system-dispatched client orders, price them against your book and keep the desk in the black.',
+    subtitle: 'Buy-side execution & RFQ',
+    blurb: 'Shop three dealers for a price, trade the exchange yourself and beat the mid — and the benchmark.',
     bullets: [
-      'Receive auto-routed client orders',
-      'Quote one-way prices under time pressure',
-      'Manage your book and hit a P&L target',
+      'Ask three dealers for a two-way price',
+      'Hit the best dealer quote or take liquidity',
+      'Trade the exchange at a taker price and beat it',
     ],
   },
   {

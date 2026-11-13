@@ -6,6 +6,7 @@ import {
   exchangeLiquidity,
   fillClientOrder,
   tradeOnExchange,
+  venuePricePreview,
   walkBook,
   type SimulationState,
 } from './simulation'
@@ -39,28 +40,28 @@ describe('walkBook', () => {
 })
 
 describe('exchange trading', () => {
-  it('buys at the offer and sells at the bid', () => {
+  it('buys at your buy price and sells at your sell price', () => {
     let state = session()
     const asks = bookOf(state).asks
-    const bidPrice = bookOf(state).bids[0].price
-    const askPrice = asks[0].price
+    const expectedBuy = venuePricePreview(state, 'AZN')
     const qty = Math.min(100, asks[0].size)
 
     state = tradeOnExchange(state, { symbol: 'AZN', side: 'BUY', qty }).state
     const buy = state.trades[0]
     expect(buy.venue).toBe('exchange')
     expect(buy.side).toBe('BUY')
-    expect(buy.price).toBeCloseTo(askPrice, 2)
+    expect(buy.price).toBeCloseTo(expectedBuy.buy, 2)
     expect(state.positions.find((position) => position.symbol === 'AZN')?.netQty).toBe(qty)
 
     const cashAfterBuy = state.cash
     expect(cashAfterBuy).toBeLessThan(STARTING_CASH)
 
+    const expectedSell = venuePricePreview(state, 'AZN')
     state = tradeOnExchange(state, { symbol: 'AZN', side: 'SELL', qty }).state
     const sell = state.trades[0]
     expect(sell.venue).toBe('exchange')
     expect(sell.side).toBe('SELL')
-    expect(sell.price).toBeCloseTo(bidPrice, 2)
+    expect(sell.price).toBeCloseTo(expectedSell.sell, 2)
     expect(state.positions.find((position) => position.symbol === 'AZN')?.netQty).toBe(0)
     expect(state.cash).toBeGreaterThan(cashAfterBuy)
   })

@@ -142,24 +142,33 @@ The desk starts with **$20,000,000** of cash (`STARTING_CASH`, shown as `CASH` i
 - a bid the desk could not settle is rejected too (`QUOTE REJECTED · buying N would exceed the cash budget`),
 - sells credit cash, so the desk can trade its way back out of a tight book.
 
-## Client flow vs the exchange
+## Two desks, two jobs
 
-You can make a price two ways, and every fill is tagged with its venue in the blotter and the settlement report.
+The two entry cards are not the same game with a different label — they sit on opposite sides of the same
+liquidity, and both of them can use the exchange at any time.
 
-| Path | How you trade | What it costs you |
+| | Market maker | Sales |
 |---|---|---|
-| `client` | a dispatched RFQ or client order is priced against your own quote and fills at *your* price | you earn the spread versus mid (edge > 0), but only if the client accepts |
-| `exchange` | the `EXCHANGE` ticket takes liquidity from the visible book, sweeping levels | you pay the market spread plus your own impact (edge < 0 straight away) |
+| Flow | receives client RFQs and quotes a two-way price | has no client flow; sends RFQs out to dealers |
+| Exchange price | `MAKER PRICE`: tight two-way (base 0.12% + up to 0.08% with volatility, ~1–2 points on an 800 stock) | `TAKER PRICE`: wide two-way (base 0.60% + up to 0.60% with volatility, ~5–10 points on an 800 stock) |
+| How you make money | spread capture from clients, hedging the risk on the exchange | buying below mid / selling above mid across dealer quotes and the exchange |
+| Score | returns / discipline / reaction / resilience / trade management / adaptability | returns 40%, entry vs mid 30%, reaction 20%, risk 10% |
 
-The exchange ticket prices the sweep for you: `Best price`, `Est. avg price` across the levels it would consume,
-`BOOK SIZE` (shares available on that side of the visible book), `NOTIONAL` and `COMMISSION`. Clips bigger than
-the book are rejected (`EXCHANGE REJECTED · only … on the book`), and buys are checked against the cash budget.
+**Dealer quotes (Sales).** `REQUEST QUOTE` asks three dealers at once — Halcyon Securities, Meridian Bank and
+Kestrel Capital. Each answers with its own two-way price, its own latency (1–3 ticks) and validity window
+(8–16 ticks), and a size that may be smaller than what you asked for. Answers appear in `DEALER QUOTES` and
+you can either buy the offer or sell the bid; the fill is tagged `DEALER`. Dealer prices land between the
+market maker's tight price and the exchange taker price, so shopping is worth it.
 
-The two legs are the classic bid-offer loop: buy from a client below mid, sell on the exchange above it (or buy
-on the exchange to cover a short), and keep the difference. `Spread capture` in the settlement report is exactly
-that number in dollars — positive means the edge earned on client flow covered the cost of crossing the exchange.
-The report also splits `Fills` into `Venue split` (client vs exchange), and `Hit ratio above mid` / `Avg edge…`
-only count client flow, so crossing the exchange never flatters your quoting quality.
+**Exchange pricing.** `venuePricePreview` in `src/engine/venues.ts` turns the mid into the two prices your
+desk can actually trade: `buy = mid × (1 + gap/2)`, `sell = mid × (1 − gap/2)`, where `gap` is the role base
+plus a volatility term (`volatilityScore` = recent 30-point drift + news bias). The ticket shows `YOUR SPREAD`,
+`ROUND-TRIP COST` and both prices, so the cost of crossing is visible before you click. Dealer quotes use the
+same helper with a middle base gap.
+
+Every fill is tagged in the blotter and in the settlement report: `CLIENT` (market maker), `DEALER` (sales)
+and `EXCHANGE` (everyone). `Venue split` shows all three counts, and `Entry vs mid` is the average bps your own
+fills (dealer + exchange) beat the mid by — positive means you bought below mid or sold above it.
 
 ## Scoring and settlement
 
@@ -296,7 +305,8 @@ Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-l
 | P2.6 (done) | Pinned-seed share links (?seed=), GitHub Pages deployment |
 | P2.7 (done) | EN/中文 UI, 5/15/30-minute tiers with a live countdown and auto-settlement, buy-and-hold benchmark |
 | P2.8 (done) | Fill impact on the tape, quote width -> fill probability (EST. FILL), Chinese beginner guide PDF |
-| P2.9 (done) | Two venues: client flow vs exchange take-liquidity, VENUE tags, spread capture in the report |
+| P2.9 (done) | Exchange take-liquidity with VENUE tags and spread capture in the report |
+| P2.13 (done) | Market maker vs sales semantics: dealer RFQs, role-specific venue pricing, role-specific scoring |
 | P3 | Polish: replay, sounds, resizable panels, session save/restore |
 
 ## Working rules
@@ -453,6 +463,6 @@ The entry screen has a MODE toggle: `SIMULATE` is the free-form desk, `TRAIN` sw
 | Headline reaction | Market Maker | 2213 | FOMC day | 4+ headlines traded, 60% of headlines answered |
 | Inventory control | Market Maker | 3307 | Classic, starts long 1,500 TSLA | Largest position at the close <= 300 shares |
 | Adverse selection | Market Maker | 4409 | Risk-off crash | Picked off at most twice, alpha vs buy & hold > $0 |
-| Two venues | Sales | 5501 | Classic | 80%+ of client notional hedged on the exchange, spread capture > $0 |
+| Two venues | Sales | 5501 | Classic | 2+ dealer fills and alpha vs buy & hold > $0 |
 
 While a drill runs a `TRAIN` strip sits under the top bar with its live metrics (`current / target`, green when the bar is met). The settlement report puts the verdict card right under the benchmark: `PASSED` / `FAILED`, one row per criterion, `ATTEMPTS n · PASSED m`, plus `RETRY DRILL` and `BACK TO DRILLS`. Attempts and best composite live in `market-sim.drills.v1` in localStorage; the drill picker shows the record on each card.

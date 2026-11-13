@@ -117,7 +117,7 @@ describe('flow agents', () => {
     const tape = selectPriceTape(session, 200, 0)
     const agentDrivers = tape.flatMap((change) => change.drivers).filter((driver) => driver.source === 'agent')
     expect(agentDrivers.length).toBeGreaterThan(0)
-    expect(agentDrivers[0].label).toMatch(/(informed|momentum|value|market maker|noise) (buy|sell)/)
+    expect(agentDrivers[0].label).toMatch(/(informed|momentum|value|maker|noise) (buy|sell)/)
   })
 
   it('keeps every agent inside its cash and gross limits', () => {

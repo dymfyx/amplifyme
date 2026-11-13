@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { advanceSession, createSession, fillClientOrder, tradeOnExchange } from './simulation'
+import {
+  advanceSession,
+  createSession,
+  hitDealerQuote,
+  requestDealerQuote,
+  selectDealerQuotes,
+} from './simulation'
 import { drillById, drillMetrics, drillProgress, formatMetric, scenarioForDrill } from '../train/drills'
 import { emptyDrillRecords, readDrillRecords, recordDrillAttempt } from '../train/records'
 
@@ -80,30 +86,22 @@ describe('training drills', () => {
     expect(progress.metrics[1].value).toBeCloseTo(traded / headlines, 6)
   })
 
-  it('measures the client-to-exchange hedge for the two-venue drill', () => {
-    const base = createSession(drill('two-venues').seed, [], { minutes: 5 })
-    const noHedge = drillMetrics(drill('two-venues'), base)
-    expect(noHedge[0].id).toBe('hedge')
-    expect(noHedge[0].value).toBe(0)
+  it('measures dealer fills for the two-venue drill', () => {
+    const base = createSession(drill('two-venues').seed, [], { minutes: 5, role: 'sales' })
+    const empty = drillMetrics(drill('two-venues'), base)
+    expect(empty[0].id).toBe('dealer')
+    expect(empty[0].value).toBe(0)
 
-    const rfq = base.dispatch[0]
-    const client = fillClientOrder(base, {
-      symbol: rfq.symbol,
-      clientSide: rfq.side,
-      client: rfq.client,
-      qty: Math.min(500, rfq.qty),
-      price: rfq.symbol === 'AZN' ? 802 : 100,
-      rfqId: rfq.id,
-    })
-    const hedged = tradeOnExchange(client.state, { symbol: rfq.symbol, side: 'SELL', qty: 500 })
-    const metrics = drillMetrics(drill('two-venues'), hedged.state)
-    const hedge = metrics.find((metric) => metric.id === 'hedge')
-    const capture = metrics.find((metric) => metric.id === 'capture')
+    const asked = requestDealerQuote(base, { symbol: 'AZN', side: 'BUY', qty: 1000 }).state
+    const ready = advanceSession(asked, 6)
+    const quote = selectDealerQuotes(ready)[0]
+    expect(quote).toBeTruthy()
 
-    expect(hedge?.value).toBeGreaterThan(0)
-    expect(typeof capture?.value).toBe('number')
+    const filled = hitDealerQuote(ready, { quoteId: quote.id, side: 'BUY' }).state
+    const metrics = drillMetrics(drill('two-venues'), filled)
+    expect(metrics.find((metric) => metric.id === 'dealer')?.value).toBe(1)
+    expect(typeof metrics.find((metric) => metric.id === 'alpha')?.value).toBe('number')
   })
-
   it('records attempts and passes per drill in storage', () => {
     const storage = fakeStorage()
     expect(readDrillRecords(storage)).toEqual({})

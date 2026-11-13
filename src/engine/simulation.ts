@@ -8,11 +8,13 @@ import type {
   Position,
   QuoteRow,
   Rfq,
+  Role,
   Side,
   TradeRow,
 } from '../types'
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
 import { DISPATCH_NOTES, FLOW_EVENTS, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
+import { dealerGap, quoteAroundMid, venueGap, volatilityScore } from './venues'
 import {
   aggregateFlows,
   agentViews,
@@ -288,7 +290,7 @@ export interface SimulationState {
   /** 可用资金（买入扣钱、卖出加钱），不能为负 */
   cash: number
   nextDispatchAt: number
-  counters: { rfq: number; quote: number; order: number; trade: number }
+  counters: { rfq: number; quote: number; order: number; trade: number; dealerQuote: number }
   /** 决策遥测：报价/成交/回撤/新闻响应，评分与结算报告的数据源 */
   telemetry: Telemetry
   /** 这一局的剧本（场景库或自定义 JSON） */
@@ -302,6 +304,31 @@ export interface SimulationState {
   history: PriceFrame[]
   /** 10 个流式智能体：它们主动买卖、推动价格，也可能成为我们报价的对手方 */
   agents: AgentState[]
+  /** 这一局扮演的台面：决定交易所成交价（MM 更紧 / Sales 更宽）以及可用工具 */
+  role: Role
+  /** Sales 向 dealer 发出的问价与收到的回价（P2.13） */
+  dealerQuotes: DealerQuote[]
+}
+
+/** Sales 向 dealer 要价：一条回价记录 */
+export interface DealerQuote {
+  id: string
+  /** 同一次 RFQ 发出的几家回价共用一个 requestId */
+  requestId: string
+  dealerId: string
+  dealerName: string
+  symbol: string
+  /** 我们要做的方向：BUY = 我们想买（打 dealer 的 offer），SELL = 想卖（砸 dealer 的 bid） */
+  side: Side
+  qty: number
+  bid: number
+  offer: number
+  /** dealer 愿意承接的数量（可能小于 request） */
+  size: number
+  /** 回价最早可成交的 tick（模拟电话/系统延迟） */
+  readyAt: number
+  /** 回价过期 tick */
+  expiresAt: number
 }
 
 /** 回放用的一帧：时间和五个名字的最新价 */
@@ -429,6 +456,8 @@ export interface SessionOptions {
   minutes?: SessionMinutes
   /** 这一局的剧本，默认 classic（就是原来的 20 条新闻） */
   scenario?: Scenario
+  /** 台面角色：决定交易所成交价（MM 更紧 / Sales 更宽）和可用工具，默认 market-maker */
+  role?: Role
 }
 
 export function createSession(
@@ -520,7 +549,7 @@ export function createSession(
     commission: 0,
     cash: STARTING_CASH,
     nextDispatchAt: START_SECONDS + 900,
-    counters: { rfq: 201, quote: 118, order: 1043, trade: 8841 },
+    counters: { rfq: 201, quote: 118, order: 1043, trade: 8841, dealerQuote: 0 },
     telemetry: recordRfq(createTelemetry()),
     scenario,
     clients: DEFAULT_CLIENTS,
@@ -534,6 +563,8 @@ export function createSession(
       },
     ],
     agents,
+    role: options.role ?? 'market-maker',
+    dealerQuotes: [],
   }
 }
 
@@ -564,6 +595,36 @@ function bookMid(book: Book): number {
   const bid = book.bids[0]?.price ?? 0
   const ask = book.asks[0]?.price ?? bid
   return round2((bid + ask) / 2)
+}
+
+/** 当前标的的波动因子（0 平静 → 1 剧烈）：交易所价差和 dealer 报价都按它放大 */
+export function instrumentVolatility(state: SimulationState, symbol: string): number {
+  const instrument = state.instruments.find((item) => item.symbol === symbol)
+  if (!instrument) return 0.4
+  return volatilityScore(instrument.series, state.newsBias[symbol] ?? 0)
+}
+
+export interface VenuePricePreview {
+  mid: number
+  buy: number
+  sell: number
+  /** 买卖价之间的差距（绝对价格） */
+  gapPoints: number
+  gapBps: number
+  volatility: number
+}
+
+/**
+ * 面板 5 上「我这个角色」的实时买卖价：引擎成交和界面展示共用这一个函数，
+ * 保证看到的价就是点下去成交的价。MM 的价差更紧，Sales 更宽（见 venues.ts）。
+ */
+export function venuePricePreview(state: SimulationState, symbol: string): VenuePricePreview {
+  const instrument = state.instruments.find((item) => item.symbol === symbol)
+  const mid = instrument ? bookMid(instrument.book) : 0
+  const volatility = instrumentVolatility(state, symbol)
+  const gap = venueGap(state.role, volatility)
+  const { buy, sell, gapPoints } = quoteAroundMid(mid, gap)
+  return { mid, buy, sell, gapPoints, gapBps: round2(gap * 10000), volatility }
 }
 
 function bookOf(instruments: InstrumentState[], symbol: string): Book {
@@ -1140,6 +1201,9 @@ export function stepSession(state: SimulationState): SimulationState {
   /* 6. 会话结束 */
   const status: SessionStatus = simSeconds - state.startedAt >= SESSION_SECONDS ? 'CLOSED' : 'RUNNING'
 
+  /* 6b. dealer 回价过期：电话里报的价格有有效期 */
+  const dealerQuotes = state.dealerQuotes.filter((quote) => tick <= quote.expiresAt)
+
   /* 7. 回放帧：每帧记录五个名字的价格，供结算后的复盘时间轴使用 */
   const history: PriceFrame[] =
     tick % PRICE_UPDATE_TICKS === 0
@@ -1179,6 +1243,7 @@ export function stepSession(state: SimulationState): SimulationState {
     clientHeat,
     history,
     agents,
+    dealerQuotes,
   }
 }
 
@@ -1452,10 +1517,12 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
     return { state, message: `EXCHANGE REJECTED · only ${available} ${input.symbol} on the book` }
   }
 
-  const walked = walkBook(levels, qty)
-  if (!walked) return { state, message: 'EXCHANGE REJECTED · not enough liquidity' }
+  /* 成交价 = 这个角色在面板 5 上看到的买/卖价；MM 的双边价更紧，Sales 更宽 */
+  const preview = venuePricePreview(state, input.symbol)
+  const price = input.side === 'BUY' ? preview.buy : preview.sell
+  const mid = preview.mid
+  if (!(price > 0)) return { state, message: 'EXCHANGE REJECTED · no market right now' }
 
-  const price = walked.avgPrice
   const gross = qty * price
   const fee = round2(gross * COMMISSION_RATE)
   if (input.side === 'BUY' && gross + fee > state.cash) {
@@ -1464,9 +1531,10 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
     return { state, message: `EXCHANGE REJECTED · insufficient cash (need $${need}, have $${have})` }
   }
 
-  const mid = bookMid(instrument.book)
   const positions = applyPositionFill(state.positions, input.symbol, input.side, qty, price)
-  const instruments = applyFillImpact(state.instruments, input.symbol, input.side, gross, state.tick)
+  /* 做市商提供流动性，自己下单对市场的冲击小一些；Sales 主动吃单，冲击全额 */
+  const impactNotional = gross * (state.role === 'sales' ? 1 : 0.7)
+  const instruments = applyFillImpact(state.instruments, input.symbol, input.side, impactNotional, state.tick)
   const counters = { ...state.counters, trade: state.counters.trade + 1, order: state.counters.order + 1 }
   const order: OrderRow = {
     id: `ORD-${counters.order}`,
@@ -1516,8 +1584,190 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
     },
     message: `EXCHANGE FILLED · ${input.side} ${qty.toLocaleString('en-US')} ${input.symbol} @ ${price.toFixed(
       2,
-    )} · ${walked.levels} LEVEL${walked.levels === 1 ? '' : 'S'}`,
+    )} · ${preview.gapBps.toFixed(0)}bps ${state.role === 'sales' ? 'taker' : 'maker'} spread`,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Sales 问价：向 dealer 要双边价，挑一家打或者放着等过期            */
+/* ------------------------------------------------------------------ */
+
+export interface DealerDefinition {
+  id: string
+  name: string
+  /** 报价宽度系数：越大越宽（越不划算） */
+  width: number
+  /** 回价延迟（tick）：电话打过去要等 */
+  latency: number
+}
+
+export const DEALERS: DealerDefinition[] = [
+  { id: 'DLR-01', name: 'Halcyon Securities', width: 0.8, latency: 1 },
+  { id: 'DLR-02', name: 'Meridian Bank', width: 1.0, latency: 2 },
+  { id: 'DLR-03', name: 'Kestrel Capital', width: 1.3, latency: 3 },
+]
+
+export interface DealerRequestInput {
+  symbol: string
+  /** 我们想做方向：BUY = 想买，SELL = 想卖 */
+  side: Side
+  qty: number
+}
+
+/**
+ * Sales 向三家 dealer 同时要价：价格围绕中间价、按各自宽度和 skew 报出，
+ * 有延迟（1–4 tick）、有有效期，能承接的数量也可能小于我们要的。
+ */
+export function requestDealerQuote(state: SimulationState, input: DealerRequestInput): ActionResult {
+  if (state.role !== 'sales') {
+    return { state, message: 'RFQ REJECTED · the market making desk quotes prices, it does not ask for them' }
+  }
+  const qty = Math.trunc(input.qty)
+  if (!(qty > 0)) return { state, message: 'RFQ REJECTED · quantity must be positive' }
+  const instrument = state.instruments.find((item) => item.symbol === input.symbol)
+  if (!instrument) return { state, message: 'RFQ REJECTED · unknown instrument' }
+  const mid = bookMid(instrument.book)
+  if (!(mid > 0)) return { state, message: 'RFQ REJECTED · no market right now' }
+
+  const volatility = instrumentVolatility(state, input.symbol)
+  const base = dealerGap(volatility)
+  let rng = state.rng
+  let seq = state.counters.dealerQuote
+  const created: DealerQuote[] = []
+  for (const dealer of DEALERS) {
+    const [latencyRoll, afterLatency] = nextRandom(rng)
+    const [widthRoll, afterWidth] = nextRandom(afterLatency)
+    const [skewRoll, afterSkew] = nextRandom(afterWidth)
+    const [sizeRoll, afterSize] = nextRandom(afterSkew)
+    const [ttlRoll, afterTtl] = nextRandom(afterSize)
+    rng = afterTtl
+    seq += 1
+    const latency = dealer.latency + (latencyRoll > 0.6 ? 1 : 0)
+    const gap = base * dealer.width * (0.85 + widthRoll * 0.3)
+    /* 每家 dealer 会把自己的双边价整体抬一点或压一点，模拟不同库存/看法 */
+    const skew = (skewRoll - 0.5) * gap * 0.3
+    const bid = round2(mid * (1 - gap / 2) + skew)
+    const offer = round2(Math.max(bid + 0.01, mid * (1 + gap / 2) + skew))
+    const size = Math.max(
+      instrument.lot,
+      Math.round((qty * (0.5 + sizeRoll * 0.8)) / instrument.lot) * instrument.lot,
+    )
+    created.push({
+      id: `DQ-${seq}`,
+      requestId: `RQ-${seq}`,
+      dealerId: dealer.id,
+      dealerName: dealer.name,
+      symbol: input.symbol,
+      side: input.side,
+      qty,
+      bid,
+      offer,
+      size,
+      readyAt: state.tick + latency,
+      expiresAt: state.tick + latency + 8 + Math.round(ttlRoll * 8),
+    })
+  }
+
+  return {
+    state: {
+      ...state,
+      rng,
+      counters: { ...state.counters, dealerQuote: seq },
+      dealerQuotes: [...state.dealerQuotes, ...created].slice(-18),
+    },
+    message: `RFQ SENT · ${input.side} ${qty.toLocaleString('en-US')} ${input.symbol} · ${DEALERS.length} dealers calling back`,
+  }
+}
+
+export interface DealerHitInput {
+  quoteId: string
+  /** 我们要做的方向：BUY 打 dealer 的 offer，SELL 砸 dealer 的 bid */
+  side: Side
+  /** 打多少，默认 dealer 能承接的全部 */
+  qty?: number
+}
+
+/** 打掉某家 dealer 的报价：BUY 打 offer，SELL 砸 bid */
+export function hitDealerQuote(state: SimulationState, input: DealerHitInput): ActionResult {
+  const quote = state.dealerQuotes.find((item) => item.id === input.quoteId)
+  if (!quote) return { state, message: 'DEALER QUOTE GONE · it expired or was already used' }
+  if (state.tick < quote.readyAt) return { state, message: 'DEALER NOT ON THE LINE YET · wait for the callback' }
+  if (state.tick > quote.expiresAt) return { state, message: 'DEALER QUOTE EXPIRED · send a new RFQ' }
+  const instrument = state.instruments.find((item) => item.symbol === quote.symbol)
+  if (!instrument) return { state, message: 'DEALER QUOTE EXPIRED · unknown instrument' }
+
+  const qty = Math.min(quote.size, Math.trunc(input.qty ?? quote.size))
+  if (!(qty > 0)) return { state, message: 'DEALER REJECTED · quantity must be positive' }
+  const price = input.side === 'BUY' ? quote.offer : quote.bid
+  const gross = qty * price
+  const fee = round2(gross * COMMISSION_RATE)
+  if (input.side === 'BUY' && gross + fee > state.cash) {
+    const need = Math.ceil(gross + fee).toLocaleString('en-US')
+    const have = Math.floor(state.cash).toLocaleString('en-US')
+    return { state, message: `DEALER REJECTED · insufficient cash (need $${need}, have $${have})` }
+  }
+
+  const mid = bookMid(instrument.book)
+  const positions = applyPositionFill(state.positions, quote.symbol, input.side, qty, price)
+  /* 打 dealer 的价不直接挂在盘口上，对市场的冲击只有交易所的一半 */
+  const instruments = applyFillImpact(state.instruments, quote.symbol, input.side, gross * 0.5, state.tick)
+  const counters = { ...state.counters, trade: state.counters.trade + 1, order: state.counters.order + 1 }
+  const order: OrderRow = {
+    id: `ORD-${counters.order}`,
+    time: formatShortTime(state.simSeconds),
+    symbol: quote.symbol,
+    side: input.side,
+    qty,
+    price,
+    status: 'FILLED',
+    venue: 'dealer',
+  }
+  const trade: TradeRow = {
+    id: `TRD-${counters.trade}`,
+    time: formatShortTime(state.simSeconds),
+    symbol: quote.symbol,
+    side: input.side,
+    qty,
+    price,
+    fee,
+    venue: 'dealer',
+  }
+  const telemetry = recordFill(state.telemetry, {
+    id: trade.id,
+    symbol: quote.symbol,
+    side: input.side,
+    qty,
+    price,
+    mid,
+    edge: round2(input.side === 'BUY' ? mid - price : price - mid),
+    notional: round2(gross),
+    fee,
+    tick: state.tick,
+    venue: 'dealer',
+  })
+
+  return {
+    state: {
+      ...state,
+      positions,
+      instruments,
+      telemetry,
+      commission: round2(state.commission + fee),
+      orders: [order, ...state.orders].slice(0, 20),
+      trades: [trade, ...state.trades].slice(0, 20),
+      cash: round2(state.cash + (input.side === 'BUY' ? -(gross + fee) : gross - fee)),
+      counters,
+      dealerQuotes: state.dealerQuotes.filter((item) => item.id !== quote.id),
+    },
+    message: `DEALER FILLED · ${quote.side} ${qty.toLocaleString('en-US')} ${quote.symbol} @ ${price.toFixed(
+      2,
+    )} · ${quote.dealerName}`,
+  }
+}
+
+/** 当前在途/可打的 dealer 回价，按最早可成交时间排序 */
+export function selectDealerQuotes(state: SimulationState): DealerQuote[] {
+  return [...state.dealerQuotes].sort((a, b) => a.readyAt - b.readyAt)
 }
 
 export function declineDispatch(state: SimulationState, rfqId: string): ActionResult {

@@ -42,11 +42,12 @@ describe('role selection', () => {
     expect(screen.getByLabelText('Offer price')).toBeInTheDocument()
   })
 
-  it('opens the sales terminal with a client order ticket', () => {
+  it('opens the sales terminal with a request-quote ticket', () => {
     openDesk('Sales')
     expect(screen.getByText('SALES DESK')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'CLIENT ORDER' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'REQUEST QUOTE' })).toBeInTheDocument()
     expect(screen.getByLabelText('Quantity')).toHaveValue('2000')
+    expect(screen.getByRole('heading', { name: 'DEALER QUOTES' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Bid price')).not.toBeInTheDocument()
   })
 
@@ -276,24 +277,28 @@ describe('tickets', () => {
     expect(chance).toBeLessThanOrEqual(96)
   })
 
-  it('fills a client order for a sales trader and updates the position', () => {
+  it('asks a dealer for a price and takes it', () => {
     openDesk('Sales')
     fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1500' } })
-    fireEvent.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
-    const status = screen.getByRole('status')
-    expect(status).toHaveTextContent('FILLED · BUY 1,500 AZN')
-    expect(screen.getAllByText('1,500').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'SEND RFQ' }))
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    const take = screen.getAllByRole('button', { name: /^BUY .* AZN at .* from / })[0]
+    fireEvent.click(take)
+    expect(screen.getByText(/DEALER FILLED · BUY/)).toBeInTheDocument()
+    expect(screen.getAllByText(/1,500/).length).toBeGreaterThan(0)
   })
 
   it('opens every session flat and fills the book as orders land', () => {
-    openDesk('Sales')
+    openDesk('Market Maker')
     expect(screen.getByText('Flat — no open positions in this session')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /ORDERS/ }))
     expect(screen.getByText('No orders yet — book one from the ticket')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /TRADES/ }))
     expect(screen.getByText('No fills yet in this session')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
+    fireEvent.click(screen.getByRole('button', { name: 'BUY AT MARKET' }))
     expect(screen.getAllByText(/^TRD-\d+$/).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /ORDERS/ }))
     expect(screen.getByText(/^ORD-\d+$/)).toBeInTheDocument()
@@ -425,10 +430,15 @@ describe('exchange trading', () => {
     expect(screen.getAllByText('EXCHANGE').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('tags client fills with the client venue', () => {
+  it('tags dealer fills with the dealer venue', () => {
     openDesk('Sales')
-    fireEvent.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
-    expect(screen.getAllByText('CLIENT').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'SEND RFQ' }))
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: /^SELL .* AZN at .* to / })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'RECENT FILLS' }))
+    expect(screen.getAllByText('DEALER').length).toBeGreaterThan(0)
   })
 
   it('translates the exchange ticket when the desk runs in Chinese', () => {

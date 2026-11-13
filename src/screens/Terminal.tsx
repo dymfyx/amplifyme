@@ -7,6 +7,7 @@ import {
   selectAgents,
   selectBook,
   selectCash,
+  selectDealerQuotes,
   selectChartMarkers,
   selectDrivers,
   selectHistory,
@@ -17,6 +18,8 @@ import {
   selectScenario,
   selectSeries,
   selectSessionMeta,
+  venuePricePreview,
+  type DealerRequestInput,
   type ExchangeTradeInput,
   type FillInput,
   type OpeningPosition,
@@ -40,6 +43,7 @@ import type { DrillRecord } from '../train/records'
 import ChartPanel from '../components/ChartPanel'
 import DrillHud from '../components/DrillHud'
 import BookPanel from '../components/BookPanel'
+import DealerQuotePanel from '../components/DealerQuotePanel'
 import DispatchPanel from '../components/DispatchPanel'
 import EventFeed from '../components/EventFeed'
 import ExchangeTicket from '../components/ExchangeTicket'
@@ -55,6 +59,7 @@ import ReplayDrawer, {
 import SettlementReport from '../components/SettlementReport'
 import StatusBar from '../components/StatusBar'
 import TopBar from '../components/TopBar'
+import QuoteRequestTicket from '../components/QuoteRequestTicket'
 import TradeTicket from '../components/TradeTicket'
 
 interface TerminalProps {
@@ -93,8 +98,8 @@ export default function Terminal({
   onExit,
 }: TerminalProps) {
   const t = useT()
-  const [initial] = useState(() => createSession(seed ?? undefined, openingBook, { minutes, scenario }))
-  const simulation = useSimulation(initial, openingBook, seed, minutes, scenario)
+  const [initial] = useState(() => createSession(seed ?? undefined, openingBook, { minutes, scenario, role }))
+  const simulation = useSimulation(initial, openingBook, seed, minutes, scenario, role)
   const { state } = simulation
 
   const [selected, setSelected] = useState('AZN')
@@ -117,6 +122,8 @@ export default function Terminal({
   const activeRfq = rfqs.find((item) => item.id === activeRfqId)
   const meta = selectSessionMeta(state, simulation.latencyMs)
   const cash = selectCash(state)
+  const dealerQuotes = selectDealerQuotes(state)
+  const venuePreview = venuePricePreview(state, selected)
   const score = scoreSession(state)
   const settlement = selectSettlement(state)
   const coaching = coachingSummary(state)
@@ -235,6 +242,9 @@ export default function Terminal({
   const handleQuote = (input: QuoteInput) => simulation.sendQuote(input)
   const handleFill = (input: FillInput) => simulation.fillClientOrder(input)
   const handleExchangeTrade = (input: ExchangeTradeInput) => simulation.tradeOnExchange(input)
+  const handleDealerRequest = (input: DealerRequestInput) => simulation.requestDealerQuote(input)
+  const handleDealerHit = (quoteId: string, side: 'BUY' | 'SELL') =>
+    simulation.hitDealerQuote({ quoteId, side })
   const handleDecline = () =>
     activeRfq ? simulation.declineDispatch(activeRfq.id) : 'NO DISPATCH SELECTED'
 
@@ -288,28 +298,44 @@ export default function Terminal({
             onSelect={setSelected}
           />
           <BookPanel symbol={selected} book={book} />
-          <DispatchPanel rfqs={rfqs} activeId={activeRfqId ?? ''} onSelect={selectRfq} role={role} />
+          {role === 'market-maker' ? (
+            <DispatchPanel rfqs={rfqs} activeId={activeRfqId ?? ''} onSelect={selectRfq} role={role} />
+          ) : (
+            <DealerQuotePanel quotes={dealerQuotes} tick={state.tick} onTake={handleDealerHit} />
+          )}
         </aside>
 
         <section className="rail rail--center">
-          <TradeTicket
-            key={`${selected}-${activeRfqId ?? 'none'}-${state.seed}`}
-            role={role}
-            instrument={instrument}
-            book={book}
-            rfq={activeRfq}
-            quotes={state.quotes}
-            recentFills={state.trades}
-            cash={cash}
-            onQuote={handleQuote}
-            onFill={handleFill}
-            onDecline={handleDecline}
-          />
+          {role === 'market-maker' ? (
+            <TradeTicket
+              key={`${selected}-${activeRfqId ?? 'none'}-${state.seed}`}
+              role={role}
+              instrument={instrument}
+              book={book}
+              rfq={activeRfq}
+              quotes={state.quotes}
+              recentFills={state.trades}
+              cash={cash}
+              onQuote={handleQuote}
+              onFill={handleFill}
+              onDecline={handleDecline}
+            />
+          ) : (
+            <QuoteRequestTicket
+              key={`rfq-${selected}-${state.seed}`}
+              instrument={instrument}
+              cash={cash}
+              recentFills={state.trades}
+              onRequest={handleDealerRequest}
+            />
+          )}
           <ExchangeTicket
-            key={`exchange-${selected}-${state.seed}`}
+            key={`exchange-${selected}-${state.seed}-${role}`}
             instrument={instrument}
             book={book}
             cash={cash}
+            role={role}
+            preview={venuePreview}
             onTrade={handleExchangeTrade}
           />
           <ChartPanel

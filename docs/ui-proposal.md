@@ -616,8 +616,35 @@ P0 已交付：
   - Headline reaction（MM, 2213, fomc）：已交易头条 ≥ 4、回应比例 ≥ 60%。
   - Inventory control（MM, 3307, classic，开局 TSLA +1500）：收盘最大持仓 ≤ 300 股。
   - Adverse selection（MM, 4409, crash）：成交即被套 ≤ 2 次、alpha > 0。
-  - Two venues（Sales, 5501, classic）：交易所对冲的客户名义额 ≥ 80%、价差捕获 > 0。
+  - Two venues（Sales, 5501, classic）：交易对手成交 ≥ 2 笔、alpha > 0。
 - 盘中 `DrillHud`（`role="status"`）显示每个指标的 `current / target`，达标变绿；结算报告在基准对比下插入 `DrillVerdict`（PASSED/FAILED、逐条指标、`ATTEMPTS n · PASSED m`、`RETRY DRILL` / `BACK TO DRILLS`）。
 - 记录存在 `market-sim.drills.v1`（`src/train/records.ts`），卡片显示「尚未尝试 / 尝试 n 次 · 通过 m 次 / 最佳综合分」。
 - 智能体从 10 扩到 30（每个 archetype 6 个）：`AGENT_COUNT = 30`，聚合流量与成交量分别乘 `AGENT_FLOW_SCALE = 0.5` / `AGENT_VOLUME_SCALE = 0.25`，保持与 10 人同一量级的波动；`FLOW` 抽屉显示 `ACTIVE n/30`。
 - 测试：新增 `src/engine/drills.test.ts`（8 例：单位格式化、drill 解析、报价纪律指标、库存上限正反例、头条计数、两条腿对冲、记录读写与坏数据回退）与 `src/test/app.test.tsx` 的 `describe('training mode')`（3 例：TRAIN 列表、开局 HUD、结算判定 + 记录 + 返回列表）。全量 **216 例**。
+
+## 23. 两个角色真正分开（P2.13）
+
+**需求（用户原话）**：「mm继续收客户单和报价，sales 只是改成向 dealer 要价，然后 mm 也改成可以承担风险自己去交易所倒手」；
+「sale 的面板5应该做成随时自由交易，然后买入卖出实时价格应该差距较大才对，然后 mm 方买入卖出实时相对差价应该较小」；
+「比如买入价800时，卖出价低5-10，但是会有波动，这个你自己设计」——两个角色共用同一引擎，差别在「谁提供流动性」与评分口径，不做人为难度系数。
+
+**引擎**
+
+- 新文件 `src/engine/venues.ts`：双边总价差比例由「角色基准 + 波动项」组成——Sales `0.006 + 0.006 × vol`、MM `0.0012 + 0.0008 × vol`、Dealer `0.0032 + 0.0016 × vol`；`volatilityScore` = 近 30 点平均绝对收益（bps）/10 与 |newsBias|/100 的 0.6/0.4 加权。`quoteAroundMid(mid, gap)` 给出 `buy = mid × (1+gap/2)`、`sell = mid × (1−gap/2)`。
+- `SimulationState` 增加 `role`（`SessionOptions.role`，默认 market maker）与 `dealerQuotes`；`venuePricePreview(state, symbol)` 是 UI 与成交共用的价格来源。
+- `tradeOnExchange` 用 `venuePricePreview` 定价（不再按盘口逐档均价），冲击系数 Sales 1.0 / MM 0.7。
+- Dealer 流程：`requestDealerQuote`（仅 Sales；三家 Halcyon 0.8/1、Meridian 1.0/2、Kestrel 1.3/3，宽窄×latency×随机偏斜，8–16 tick 有效期，数量可能不足）、`hitDealerQuote`（按期未到 / 过期 / 现金 / 数量校验，成交写 `venue: 'dealer'`，冲击按 50%）、`selectDealerQuotes`。
+- `SettlementStats` 增加 `dealerFills / dealerNotional / entryEdgeBps`；结算报告 `Venue split` 改成 client · dealer · exchange 三段，并新增 `Entry vs mid`。
+- `scoreSession` 按角色分支：Sales 四维（returns 40%、entry 30%、reaction 20%、risk 10%），MM 维持六维；`AdviceKey` 增加 `entry`。
+
+**界面**
+
+- Sales：面板 3 = `DEALER QUOTES`（dealer/RQ 编号、SELL bid / BUY offer、宽度、SIZE、剩余有效期；未回来时显示 `CALLING · n ticks`），面板 4 = `REQUEST QUOTE`（Instrument / We want to / Quantity / SEND RFQ + RECENT FILLS），面板 5 = `EXCHANGE · TAKER PRICE`，显示 You buy at / You sell at / YOUR SPREAD / ROUND-TRIP COST。
+- MM：面板 3/4 保持 `DISPATCH` + `QUOTE TICKET`，面板 5 = `EXCHANGE · MAKER PRICE`（更紧的双边价，作为对冲辅助）。
+- 价格带里 30 个智能体贴上短标签（`maker buy` 等），避免窄屏 DRIVER 列被挤断；入口 Sales 卡文案改为买方语义（询价三家 + 交易所主动成交 + 贴近中间价）。
+
+**测试**
+
+- 新增 `src/engine/dealer.test.ts`（8 例：角色价差对比、波动项与 dealer 区间、按角色价成交、Sales 询价三家 / MM 被拒、双边价与有效期、未接通与过期、dealer 成交记账、结算与四维评分）。
+- `src/engine/exchange.test.ts` 的成交价断言改成 `venuePricePreview`；`src/train/drills.ts` 的 Two venues 改为「dealer 成交 ≥ 2、alpha > 0」；app 测试重写 Sales 流程（询价 → 打回价、DEALER 徽标）。
+- 全量 **224 例**；`tsc` 干净；`npm run build` 通过。

@@ -10,7 +10,11 @@ import {
   stepSession,
   togglePause,
   tradeOnExchange,
+  requestDealerQuote,
+  hitDealerQuote,
   type ActionResult,
+  type DealerHitInput,
+  type DealerRequestInput,
   type ExchangeTradeInput,
   type FillInput,
   DEFAULT_MINUTES,
@@ -20,13 +24,18 @@ import {
   type SessionOptions,
   type SimulationState,
 } from '../engine/simulation'
+import type { Role } from '../types'
 
 export interface SimulationApi {
   state: SimulationState
   latencyMs: number
   fillClientOrder: (input: FillInput) => string
-  /** 自己在交易所主动成交（吃盘口流动性），与客户流分开记账 */
+  /** 自己在交易所主动成交：成交价按角色给（MM 更紧 / Sales 更宽） */
   tradeOnExchange: (input: ExchangeTradeInput) => string
+  /** Sales 向 dealer 要价 */
+  requestDealerQuote: (input: DealerRequestInput) => string
+  /** 打掉某家 dealer 的回价 */
+  hitDealerQuote: (input: DealerHitInput) => string
   sendQuote: (input: QuoteInput) => string
   declineDispatch: (rfqId: string) => string
   togglePause: () => void
@@ -46,6 +55,7 @@ export function useSimulation(
   fixedSeed: number | null = null,
   minutes: SessionMinutes = DEFAULT_MINUTES,
   scenario?: SessionOptions['scenario'],
+  role: Role = 'market-maker',
 ): SimulationApi {
   const [state, setState] = useState<SimulationState>(initial)
   const [latencyMs, setLatencyMs] = useState(14)
@@ -88,13 +98,15 @@ export function useSimulation(
       latencyMs,
       fillClientOrder: (input) => run((current) => fillClientOrder(current, input)),
       tradeOnExchange: (input) => run((current) => tradeOnExchange(current, input)),
+      requestDealerQuote: (input) => run((current) => requestDealerQuote(current, input)),
+      hitDealerQuote: (input) => run((current) => hitDealerQuote(current, input)),
       sendQuote: (input) => run((current) => sendQuote(current, input)),
       declineDispatch: (rfqId) => run((current) => declineDispatch(current, rfqId)),
       togglePause: () => commit(togglePause(latest.current)),
       cycleSpeed: () => commit(cycleSpeed(latest.current)),
       setSpeed: (speed) => commit(applySpeed(latest.current, speed)),
-      restart: () => commit(createSession(fixedSeed ?? undefined, openingBook, { minutes, scenario })),
+      restart: () => commit(createSession(fixedSeed ?? undefined, openingBook, { minutes, scenario, role })),
     }),
-    [state, latencyMs, run, commit, openingBook, fixedSeed, minutes, scenario],
+    [state, latencyMs, run, commit, openingBook, fixedSeed, minutes, scenario, role],
   )
 }

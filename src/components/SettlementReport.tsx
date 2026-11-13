@@ -174,7 +174,11 @@ export default function SettlementReport({
               </div>
               <div>
                 <dt>{t('Venue split')}</dt>
-                <dd>{t('{client} client · {exchange} exchange', { client: stats.clientFills, exchange: stats.exchangeFills })}</dd>
+                <dd>{t('{client} client · {dealer} dealer · {exchange} exchange', { client: stats.clientFills, dealer: stats.dealerFills, exchange: stats.exchangeFills })}</dd>
+              </div>
+              <div>
+                <dt>{t('Entry vs mid')}</dt>
+                <dd className={stats.entryEdgeBps < 0 ? 'num--down' : 'num--up'}>{stats.entryEdgeBps.toFixed(1)} bps</dd>
               </div>
               <div>
                 <dt>{t('Spread capture')}</dt>

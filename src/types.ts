@@ -3,7 +3,7 @@ export type Role = 'sales' | 'market-maker'
 export type Side = 'BUY' | 'SELL'
 
 /** 成交来源：客户流（我们报价/成交客户单） vs 自己在交易所主动吃单 */
-export type Venue = 'client' | 'exchange'
+export type Venue = 'client' | 'dealer' | 'exchange'
 
 export interface Instrument {
   symbol: string

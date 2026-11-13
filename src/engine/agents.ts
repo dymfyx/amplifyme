@@ -131,6 +131,15 @@ const COOLDOWN_MAX = 16
 
 const round2 = (value: number) => Math.round(value * 100) / 100
 
+/** 价格带上的短标签：market maker 太长，窄屏会把 DRIVER 列挤断 */
+export const ARCHETYPE_TAPE_LABELS: Record<AgentArchetype, string> = {
+  informed: 'informed',
+  momentum: 'momentum',
+  value: 'value',
+  maker: 'maker',
+  noise: 'noise',
+}
+
 export const ARCHETYPE_LABELS: Record<AgentArchetype, string> = {
   informed: 'informed',
   momentum: 'momentum',
@@ -447,7 +456,7 @@ export function aggregateFlows(flows: AgentFlow[]): AgentSymbolFlow[] {
     aggregated.push({
       symbol,
       bps,
-      label: `${ARCHETYPE_LABELS[lead.archetype]} ${bps > 0 ? 'buy' : 'sell'}`,
+      label: `${ARCHETYPE_TAPE_LABELS[lead.archetype]} ${bps > 0 ? 'buy' : 'sell'}`,
       hint: `${lead.agentName} + ${list.length - 1} more · ${qty} shares`,
       direction: bps > 0 ? 1 : -1,
     })

@@ -57,6 +57,8 @@ export const zhTrain: Record<string, string> = {
   'Alpha vs buy & hold': '相对买入持有的超额收益',
 
   // Drill 5 · Two venues
+  'Shop two dealers for a price, then work the other side on the exchange: take at least two dealer fills and still come out ahead.': '先向两家交易对手询价，再到交易所做另一条腿：至少打两笔 dealer 成交，并且整局仍然赚钱。',
+  'Dealer fills': '交易对手成交笔数',
   'Two venues': '双市场',
   'Take client flow and lay it off on the exchange: hedge at least 80% of client notional and capture spread.':
     '接下客户流并在交易所对冲：至少对冲 80% 的客户名义金额，同时赚取价差。',

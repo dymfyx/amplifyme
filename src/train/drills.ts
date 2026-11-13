@@ -117,15 +117,15 @@ export const DRILLS: Drill[] = [
   {
     id: 'two-venues',
     name: 'Two venues',
-    blurb: 'Take client flow and lay it off on the exchange: hedge at least 80% of client notional and capture spread.',
+    blurb: 'Shop two dealers for a price, then work the other side on the exchange: take at least two dealer fills and still come out ahead.',
     role: 'sales',
     minutes: 5,
     seed: 5501,
     scenarioId: 'classic',
     openingBook: [],
     criteria: [
-      { id: 'hedge', label: 'Client notional hedged on exchange', compare: 'gte', target: 0.8, unit: 'percent' },
-      { id: 'capture', label: 'Spread capture', compare: 'gt', target: 0, unit: 'dollars' },
+      { id: 'dealer', label: 'Dealer fills', compare: 'gte', target: 2, unit: 'count' },
+      { id: 'alpha', label: 'Alpha vs buy & hold', compare: 'gt', target: 0, unit: 'dollars' },
     ],
   },
 ]
@@ -176,8 +176,7 @@ export const drillMetrics = (drill: Drill, state: SimulationState): DrillMetric[
     maxPosition,
     pickedOff: review.adverse.length,
     alpha: stats.alpha,
-    hedge: stats.clientNotional === 0 ? 0 : stats.exchangeNotional / stats.clientNotional,
-    capture: stats.spreadCapture,
+    dealer: stats.dealerFills,
   }
 
   return drill.criteria.map((criterion) => {
