@@ -89,6 +89,11 @@ export default function ExchangeTicket({
   const visibleFlash = flash && flash !== blockedReason ? flash : null
 
   const submit = () => {
+    /* 已经知道会在哪一步被拒，就直接显示本地化的原因，不再多弹一条英文引擎消息 */
+    if (blockedReason) {
+      setFlash(blockedReason)
+      return
+    }
     setFlash(onTrade({ symbol: instrument.symbol, side, qty: requested }))
   }
 

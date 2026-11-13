@@ -9,6 +9,7 @@ import {
   tiersFor,
   verdictBand,
 } from './difficulty'
+import { createSession, tradeOnExchange } from './simulation'
 
 describe('difficulty tiers', () => {
   it('ships four tiers per desk, ordered from easiest to hardest', () => {
@@ -86,5 +87,45 @@ describe('difficulty tiers', () => {
         expect(tier.blurb.length).toBeGreaterThan(10)
       }
     }
+  })
+})
+
+describe('difficulty mandates on the exchange', () => {
+  it('lets a no-shorting desk sell holdings but not short past them', () => {
+    const session = createSession(11, [{ symbol: 'AZN', netQty: 300, avgPrice: 800 }], {
+      role: 'sales',
+      tier: tierById('sales', 1),
+    })
+    const sold = tradeOnExchange(session, { symbol: 'AZN', side: 'SELL', qty: 300 })
+    expect(sold.state.positions.find((position) => position.symbol === 'AZN')?.netQty).toBe(0)
+
+    const long = createSession(12, [{ symbol: 'AZN', netQty: 100, avgPrice: 800 }], {
+      role: 'sales',
+      tier: tierById('sales', 1),
+    })
+    const blocked = tradeOnExchange(long, { symbol: 'AZN', side: 'SELL', qty: 400 })
+    expect(blocked.message).toMatch(/NO SHORTING/)
+    expect(blocked.state).toBe(long)
+  })
+
+  it('only lets a reduce-only desk cut risk on the exchange', () => {
+    const flat = createSession(13, [], { role: 'market-maker', tier: tierById('market-maker', 4) })
+    const blockedBuy = tradeOnExchange(flat, { symbol: 'AZN', side: 'BUY', qty: 100 })
+    expect(blockedBuy.message).toMatch(/only lets the desk reduce risk/)
+
+    const long = createSession(14, [{ symbol: 'AZN', netQty: 400, avgPrice: 800 }], {
+      role: 'market-maker',
+      tier: tierById('market-maker', 4),
+    })
+    const reduced = tradeOnExchange(long, { symbol: 'AZN', side: 'SELL', qty: 400 })
+    expect(reduced.state.positions.find((position) => position.symbol === 'AZN')?.netQty ?? 0).toBe(0)
+    const blockedAdd = tradeOnExchange(long, { symbol: 'AZN', side: 'BUY', qty: 100 })
+    expect(blockedAdd.message).toMatch(/only lets the desk reduce risk/)
+  })
+
+  it('enforces the per-order caps of the tier', () => {
+    const session = createSession(15, [], { role: 'sales', tier: tierById('sales', 1) })
+    const tooBig = tradeOnExchange(session, { symbol: 'AZN', side: 'BUY', qty: 1_500 })
+    expect(tooBig.message).toMatch(/caps a single order at 1,000 shares/)
   })
 })

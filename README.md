@@ -480,7 +480,7 @@ Both desks ship four presets. The tier you pick on the entry card is stored per 
 
 Every tier is a row in `src/engine/difficulty.ts` (`SALES_TIERS`, `MAKER_TIERS`) and drives more than the table above: dealer count/latency/validity, taker vs maker gap multipliers, quote TTL, queue decay (how fast the book eats your resting quote), width penalty, `EST. FILL` jitter, sniping chance on stale quotes, post-fill adverse drift, decline quota and heat. Sales tiers also face liquidity drains on tier 4; MM tiers face faster client flow and bigger tickets. Nothing is fake-hard: same book, same commissions model, same impact model — the tier only changes who you are and who you trade against.
 
-Risk limits reject new risk: `RISK LIMIT · AZN net exposure would exceed $10m`. The exchange ticket prints the mandate next to the symbol (`FULL ACCESS`, `REDUCE ONLY`, `NO SHORTING`) and blocks orders that break it.
+Risk limits reject new risk: `RISK LIMIT · AZN net exposure would exceed $10m`. The exchange ticket prints the mandate next to the symbol (`FULL ACCESS`, `REDUCE ONLY`, `NO SHORTING`) and explains every rejection inline (amber line) while keeping the order button live.
 
 ### Session verdict
 

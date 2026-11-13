@@ -645,3 +645,29 @@ describe('exchange mandate feedback', () => {
     expect(screen.getByText(/EXCHANGE FILLED/)).toBeInTheDocument()
   })
 })
+describe('difficulty persistence', () => {
+  it('remembers the chosen tier across reloads', () => {
+    const first = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sales difficulty: Black-swan fund' }))
+    expect(readSettings().tiers).toMatchObject({ sales: 4 })
+    first.unmount()
+
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Sales difficulty: Black-swan fund' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('stores the tier with the saved session', () => {
+    window.location.hash = '#sales?minutes=5&seed=7&tier=3'
+    render(<App />)
+
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+
+    const saved = readArchive().sessions[0]
+    expect(saved.tier).toBe(3)
+  })
+})
