@@ -16,16 +16,18 @@ export interface UniverseEntry {
   sigma: number
   /** 半个点差的基点（万分之一） */
   spreadBps: number
-  /** 每档深度基准手数 */
+  /** 每档深度基准手数（仍参与成交流量与 dealer 拆单） */
   lot: number
+  /** 盘口每档的目标股数，5000 上下；剧本的 liquidityMultiplier 会再缩放它 */
+  bookSize: number
 }
 
 export const UNIVERSE: UniverseEntry[] = [
-  { symbol: 'TSCO', name: 'Tesco plc', last: 317.91, changePct: 1.83, sigma: 0.0014, spreadBps: 4, lot: 200 },
-  { symbol: 'NFLX', name: 'Netflix', last: 537.53, changePct: 9.14, sigma: 0.0024, spreadBps: 6, lot: 50 },
-  { symbol: 'TSLA', name: 'Tesla', last: 197.12, changePct: 0.37, sigma: 0.0028, spreadBps: 5, lot: 100 },
-  { symbol: 'AZN', name: 'AstraZeneca', last: 802.99, changePct: -10.51, sigma: 0.0018, spreadBps: 6, lot: 100 },
-  { symbol: 'DUOL', name: 'Duolingo', last: 281.37, changePct: 14.12, sigma: 0.0036, spreadBps: 10, lot: 50 },
+  { symbol: 'TSCO', name: 'Tesco plc', last: 317.91, changePct: 1.83, sigma: 0.0014, spreadBps: 4, lot: 200, bookSize: 6000 },
+  { symbol: 'NFLX', name: 'Netflix', last: 537.53, changePct: 9.14, sigma: 0.0024, spreadBps: 6, lot: 50, bookSize: 3000 },
+  { symbol: 'TSLA', name: 'Tesla', last: 197.12, changePct: 0.37, sigma: 0.0028, spreadBps: 5, lot: 100, bookSize: 5000 },
+  { symbol: 'AZN', name: 'AstraZeneca', last: 802.99, changePct: -10.51, sigma: 0.0018, spreadBps: 6, lot: 100, bookSize: 5000 },
+  { symbol: 'DUOL', name: 'Duolingo', last: 281.37, changePct: 14.12, sigma: 0.0036, spreadBps: 10, lot: 50, bookSize: 2500 },
 ]
 
 export interface NewsTemplate {

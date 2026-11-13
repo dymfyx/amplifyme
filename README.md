@@ -87,6 +87,7 @@ A 250 ms tick is not a price update. The tape refreshes on a slower cadence so t
 | `PRICE_UPDATE_TICKS` | 1 | Prices move on **every tick (4 times a second)** so the tape walks continuously instead of stepping |
 | `BOOK_MIN_MOVE_BPS` | 8 | The five-level book is only rebuilt once the mid has moved 8 bps (0.08%) |
 | `FORCED_REBOOK_BPS` | 12 | A headline worth at least 12 bps to that name rebuilds the book immediately |
+| `bookSize` (per name) | 2,500-6,000 | Target shares on the top book level; deeper levels step up ~35% each. Scaled by the scenario's `liquidityMultiplier` and by tier 4's liquidity drain |
 | `DRIFT_RELEASE` / `DRIFT_TTL` | 0.25 / 24 | A headline releases a quarter of its remaining drift per update, over 24 updates (~12 s) |
 | `FLOW_CHANCE` | 0.92 | Nearly every update carries an order-flow print (small clips most of the time, an occasional sweep); with no driver the price does not move |
 

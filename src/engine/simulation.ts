@@ -127,9 +127,9 @@ const INFORMED_INTERVAL_MAX = 2400
 const DISPATCH_TTL = 6000
 /** 客户画像里 patience 的基准值（对应 DISPATCH_TTL） */
 const PATIENCE_BASE = 15
-/** 排队消耗速度：每帧这个价位附近有多少主动成交量（手数 × 随机倍数） */
-const QUEUE_FLOW_MIN = 1.5
-const QUEUE_FLOW_MAX = 5.5
+/** 排队消耗速度：每帧这个价位附近有多少主动成交量（占每档挂单量的比例 × 随机倍数） */
+const QUEUE_FLOW_MIN = 0.25
+const QUEUE_FLOW_MAX = 0.9
 /** 回放用的价格快照上限（30 分钟档 7200 帧以内） */
 export const HISTORY_LIMIT = 8000
 /* 30 个智能体聚合后的流量/成交量缩放：人多但盘口深度不变，避免把行情打飞 */
@@ -195,6 +195,8 @@ export interface InstrumentState {
   sigma: number
   spreadBps: number
   lot: number
+  /** 盘口每档的目标股数（已乘上剧本的流动性倍数），5000 上下 */
+  bookSize: number
   series: number[]
   book: Book
   /** 上次建簿时的中间价，用来判断盘口要不要跟着重挂 */
@@ -388,12 +390,14 @@ function makeBook(
   rng: number,
   last: number,
   spreadBps: number,
-  lot: number,
+  levelSize: number,
   previous?: Book,
 ): [Book, number] {
   let state = rng
   const halfSpread = Math.max(0.01, round2((last * spreadBps) / 10000))
   const step = Math.max(0.01, round2(halfSpread / 2))
+  /* 每档按 100 股取整，第一档就在 levelSize 上下浮动，后面的档位逐渐加厚 */
+  const unit = Math.max(100, Math.round(levelSize / 100) * 100)
   const bids: BookLevel[] = []
   const asks: BookLevel[] = []
   for (let level = 0; level < 5; level += 1) {
@@ -401,19 +405,24 @@ function makeBook(
     state = afterBid
     const [askRoll, afterAsk] = nextRandom(state)
     state = afterAsk
-    const depth = level * 0.35
-    /* 有上一次的簿就沿用它的挂单量、只做 ±30% 的微调，让盘口看起来是在原地排队而不是整屏重刷 */
-    const bidBase = previous ? previous.bids[level].size : lot * (2 + bidRoll * 8)
-    const askBase = previous ? previous.asks[level].size : lot * (2 + askRoll * 8)
-    const bidSize = Math.round((bidBase * (0.7 + bidRoll * 0.6) * (previous ? 1 : 1 + depth)) / lot) * lot
-    const askSize = Math.round((askBase * (0.7 + askRoll * 0.6) * (previous ? 1 : 1 + depth)) / lot) * lot
+    const depth = 1 + level * 0.35
+    /*
+     * 每次重挂都向下一个"目标档位"回归一部分：既保留上一簿的连续性（看起来像在原地排队），
+     * 又不会让挂单量一路随机游走漂到几万股。
+     */
+    const bidTarget = unit * (0.85 + bidRoll * 0.3) * depth
+    const askTarget = unit * (0.85 + askRoll * 0.3) * depth
+    const bidBase = previous ? previous.bids[level].size * 0.6 + bidTarget * 0.4 : bidTarget
+    const askBase = previous ? previous.asks[level].size * 0.6 + askTarget * 0.4 : askTarget
+    const bidSize = Math.round((bidBase * (previous ? 0.95 + bidRoll * 0.1 : 1)) / 100) * 100
+    const askSize = Math.round((askBase * (previous ? 0.95 + askRoll * 0.1 : 1)) / 100) * 100
     bids.push({
       price: round2(last - halfSpread - level * step),
-      size: Math.max(lot, bidSize),
+      size: Math.max(100, bidSize),
     })
     asks.push({
       price: round2(last + halfSpread + level * step),
-      size: Math.max(lot, askSize),
+      size: Math.max(100, askSize),
     })
   }
   return [{ bids, asks }, state]
@@ -510,7 +519,8 @@ export function createSession(
     const series = raw.map((point) => round2(point * scale))
     const spreadBps = round2(entry.spreadBps * spreadMultiplier)
     const lot = Math.max(10, Math.round(entry.lot * liquidityMultiplier))
-    const [book, afterBook] = makeBook(rng, entry.last, spreadBps, lot)
+    const bookSize = Math.max(300, Math.round((entry.bookSize * liquidityMultiplier) / 100) * 100)
+    const [book, afterBook] = makeBook(rng, entry.last, spreadBps, bookSize)
     rng = afterBook
     return {
       symbol: entry.symbol,
@@ -522,6 +532,7 @@ export function createSession(
       sigma: entry.sigma,
       spreadBps,
       lot,
+      bookSize,
       series,
       book,
       bookMid: entry.last,
@@ -1077,7 +1088,7 @@ export function stepSession(state: SimulationState): SimulationState {
             rng,
             last,
             instrument.spreadBps * (draining ? 2 : 1),
-            Math.max(10, Math.round(instrument.lot * (draining ? 0.4 : 1))),
+            draining ? Math.max(300, Math.round((instrument.bookSize * 0.4) / 100) * 100) : instrument.bookSize,
             instrument.book,
           )
           rng = afterBook
@@ -1140,7 +1151,7 @@ export function stepSession(state: SimulationState): SimulationState {
       continue
     }
 
-    const lot = instruments.find((item) => item.symbol === quote.symbol)?.lot ?? 100
+    const boardSize = instruments.find((item) => item.symbol === quote.symbol)?.bookSize ?? 5_000
     const [volRoll, afterVol] = nextRandom(rng)
     rng = afterVol
     /* 智能体的主动单也在消耗盘口，所以它们活跃时我们的报价更容易被成交 */
@@ -1148,7 +1159,7 @@ export function stepSession(state: SimulationState): SimulationState {
       (agentVolumeBySymbol.get(quote.symbol) ?? 0) * AGENT_VOLUME_SCALE * tier.agentSkill,
     )
     const rawMarketVolume =
-      Math.round(lot * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN))) + agentVolume
+      Math.round(boardSize * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN))) + agentVolume
     const marketVolume = Math.round(rawMarketVolume * tier.queueDecayMult)
     const queueBefore = quote.queueAhead
     const queueAhead = Math.max(0, queueBefore - marketVolume)
@@ -1854,9 +1865,10 @@ export function requestDealerQuote(state: SimulationState, input: DealerRequestI
       continue
     }
     seq += 1
+    const sizeUnit = Math.max(100, Math.round(instrument.bookSize / 10 / 100) * 100)
     const size = Math.max(
-      instrument.lot,
-      Math.round((qty * (0.5 + sizeRoll * 0.8)) / instrument.lot) * instrument.lot,
+      sizeUnit,
+      Math.round((qty * (0.4 + sizeRoll * 0.9)) / sizeUnit) * sizeUnit,
     )
     created.push({
       id: `DQ-${seq}`,
