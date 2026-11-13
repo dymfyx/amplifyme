@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import type { Role } from './types'
 import { ArchiveDrawer } from './components/ArchiveDrawer'
-import RoleSelect from './screens/RoleSelect'
+import RoleSelect, { type EntryMode } from './screens/RoleSelect'
 import SessionSetup from './screens/SessionSetup'
 import Terminal from './screens/Terminal'
 import { DEFAULT_MINUTES, SESSION_TIERS, type OpeningPosition, type SessionMinutes } from './engine/simulation'
 import { DEFAULT_SCENARIO, SCENARIOS, type Scenario } from './engine/scenarios'
 import { I18nProvider, type Language } from './i18n'
 import { useArchive } from './hooks/useArchive'
+import { drillById, scenarioForDrill, type Drill, type DrillId } from './train/drills'
+import { readDrillRecords, recordDrillAttempt, type DrillRecord } from './train/records'
 
 interface DeepLink {
   role: Role
@@ -73,6 +75,43 @@ export default function App() {
       DEFAULT_SCENARIO,
   )
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [mode, setMode] = useState<EntryMode>('simulate')
+  const [drill, setDrill] = useState<Drill | null>(null)
+  const [drillRecords, setDrillRecords] = useState(() => readDrillRecords())
+
+  /** 训练模式：drill 自己带着台面、时长、种子、剧本与开局仓位，点一下就直接开局 */
+  const startDrill = (id: DrillId) => {
+    const next = drillById(id)
+    if (!next) return
+    setDrill(next)
+    setRole(next.role)
+    setMinutes(next.minutes)
+    setSeed(next.seed)
+    setScenario(scenarioForDrill(next))
+    setOpeningBook(next.openingBook)
+    setConfigured(true)
+    window.location.hash = ''
+  }
+
+  const reportDrillResult = (id: DrillId, passed: boolean, composite: number): DrillRecord => {
+    const next = recordDrillAttempt(id, passed, composite)
+    setDrillRecords(next)
+    return next[id]
+  }
+
+  const exitDrill = () => {
+    setConfigured(false)
+    setRole(null)
+    setDrill(null)
+    setSeed(null)
+    setOpeningBook([])
+  }
+
+  const leaveDesk = () => {
+    setDrill(null)
+    setMode('simulate')
+    reset()
+  }
 
   // 入口上的选择立即记进设置，下次打开还是这套（saveSettings 是稳定回调，不能把 archive 放进依赖）
   const saveSettings = archive.saveSettings
@@ -96,6 +135,13 @@ export default function App() {
         minutes={minutes}
         scenario={scenario}
         archiveCount={archive.file.sessions.length}
+        mode={mode}
+        onMode={(nextMode) => {
+          setMode(nextMode)
+          if (nextMode === 'simulate') setDrill(null)
+        }}
+        drillRecords={drillRecords}
+        onStartDrill={startDrill}
         onLanguage={setLanguage}
         onMinutes={setMinutes}
         onScenario={setScenario}
@@ -127,8 +173,12 @@ export default function App() {
         seed={seed}
         minutes={minutes}
         scenario={scenario}
+        drill={drill}
+        drillRecord={drill ? drillRecords[drill.id] ?? null : null}
+        onDrillResult={reportDrillResult}
+        onExitDrill={exitDrill}
         onSessionSaved={archive.addSession}
-        onExit={reset}
+        onExit={leaveDesk}
       />
     )
   }

@@ -3,6 +3,8 @@ import type { ScoreCard } from '../types'
 import type { DecisionReview, SettlementStats } from '../engine/scoring'
 import { STARTING_CASH } from '../engine/simulation'
 import { useT } from '../i18n'
+import DrillVerdict from './DrillVerdict'
+import type { Drill, DrillProgress } from '../train/drills'
 
 interface SettlementReportProps {
   desk: string
@@ -12,6 +14,13 @@ interface SettlementReportProps {
   /** 决策审阅：逆向选择、错过的消息、最大回撤、消息灵通客户占比 */
   review: DecisionReview
   scenarioName: string
+  /** 训练模式：结算时插一张 drill 判定卡 */
+  drill?: Drill | null
+  drillProgress?: DrillProgress | null
+  drillAttempts?: number
+  drillPasses?: number
+  onDrillRetry?: () => void
+  onDrillExit?: () => void
   onRestart: () => void
   onClose: () => void
 }
@@ -41,6 +50,12 @@ export default function SettlementReport({
   coaching,
   review,
   scenarioName,
+  drill = null,
+  drillProgress = null,
+  drillAttempts = 0,
+  drillPasses = 0,
+  onDrillRetry,
+  onDrillExit,
   onRestart,
   onClose,
 }: SettlementReportProps) {
@@ -135,6 +150,17 @@ export default function SettlementReport({
             </span>
           </div>
         </div>
+
+        {drill && drillProgress ? (
+          <DrillVerdict
+            drill={drill}
+            progress={drillProgress}
+            attempts={drillAttempts}
+            passes={drillPasses}
+            onRetry={onDrillRetry ?? onRestart}
+            onExit={onDrillExit ?? onClose}
+          />
+        ) : null}
 
         <div className="report__grid">
           <article className="report__card">
@@ -319,6 +345,7 @@ export default function SettlementReport({
         </div>
 
         <p className="report__coaching">{coaching}</p>
+
 
         <div className="report__actions">
           <button type="button" className="btn btn--primary" onClick={onRestart}>

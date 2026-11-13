@@ -6,6 +6,7 @@ import { zhData } from './i18n/zh-data'
 import { zhPanels } from './i18n/zh-panels'
 import { zhReplay } from './i18n/zh-replay'
 import { zhScenario } from './i18n/zh-scenario'
+import { zhTrain } from './i18n/zh-train'
 
 export type Language = 'en' | 'zh'
 
@@ -20,6 +21,8 @@ export const languageLabel: Record<Language, string> = {
 const ZH: Record<string, string> = {
   ...zhChrome,
   ...zhPanels,
+  // zhTrain 的 LIVE 是「进行中」，必须在 zhPanels 之后覆盖
+  ...zhTrain,
   ...zhData,
   ...zhArchive,
   ...zhScenario,

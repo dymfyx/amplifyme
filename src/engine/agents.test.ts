@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AGENT_COUNT,
   aggregateFlows,
   agentViews,
   createAgents,
@@ -42,30 +43,18 @@ describe('flow agents', () => {
     const [again] = createAgents(12345)
     const [other] = createAgents(999)
 
-    expect(first).toHaveLength(10)
-    expect(first.map((agent) => agent.id)).toEqual([
-      'AI-01',
-      'AI-02',
-      'AI-03',
-      'AI-04',
-      'AI-05',
-      'AI-06',
-      'AI-07',
-      'AI-08',
-      'AI-09',
-      'AI-10',
-    ])
+    expect(first).toHaveLength(AGENT_COUNT)
+    expect(AGENT_COUNT).toBe(30)
+    expect(first.map((agent) => agent.id)).toEqual(
+      Array.from({ length: AGENT_COUNT }, (_, index) => `AI-${String(index + 1).padStart(2, '0')}`),
+    )
+    // 每 6 个一种性格，顺序固定：知情 → 动量 → 价值 → 做市 → 噪音
     expect(first.map((agent) => agent.archetype)).toEqual([
-      'informed',
-      'informed',
-      'momentum',
-      'momentum',
-      'value',
-      'value',
-      'maker',
-      'maker',
-      'noise',
-      'noise',
+      ...Array<string>(6).fill('informed'),
+      ...Array<string>(6).fill('momentum'),
+      ...Array<string>(6).fill('value'),
+      ...Array<string>(6).fill('maker'),
+      ...Array<string>(6).fill('noise'),
     ])
     expect(again).toEqual(first)
     expect(afterFirst).toBeTypeOf('number')
@@ -119,7 +108,7 @@ describe('flow agents', () => {
     expect(traded.some((agent) => agent.lastActionTick > 0)).toBe(true)
     /* 每个 agent 的动作都必须是三个已知原因之一，方便 UI 解释 */
     for (const agent of traded) {
-      expect(agent.lastAction).toMatch(/^(BUY|SELL) \d+ [A-Z]{4} · (news|momentum|value|make|flow)$/)
+      expect(agent.lastAction).toMatch(/^(BUY|SELL) \d+ [A-Z]{3,4} · (news|informed|momentum|value|make|flow|noise)$/)
     }
   })
 
@@ -134,7 +123,7 @@ describe('flow agents', () => {
   it('keeps every agent inside its cash and gross limits', () => {
     const session = advanceSession(createSession(777), 600)
     const views = selectAgents(session)
-    expect(views).toHaveLength(10)
+    expect(views).toHaveLength(AGENT_COUNT)
     for (const agent of views) {
       expect(Number.isFinite(agent.pnl)).toBe(true)
       expect(agent.gross).toBeLessThanOrEqual(2.5 * 1_000_000 + 1)
@@ -185,10 +174,10 @@ describe('flow agents', () => {
     const before = JSON.parse(JSON.stringify(session.agents))
     const result = stepAgents(session.agents, session.rng, viewOf(session))
     expect(session.agents).toEqual(before)
-    expect(result.agents).toHaveLength(10)
+    expect(result.agents).toHaveLength(AGENT_COUNT)
     expect(result.flows.every((entry) => entry.qty > 0)).toBe(true)
     expect(result.rng).toBeTypeOf('number')
     const views: AgentView[] = agentViews(result.agents, viewOf(session))
-    expect(views).toHaveLength(10)
+    expect(views).toHaveLength(AGENT_COUNT)
   })
 })

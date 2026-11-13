@@ -1,0 +1,401 @@
+/* ------------------------------------------------------------------ */
+/* TRAIN 模式：drill 选择卡 / 盘中 HUD / 结算判定卡                       */
+/* 只使用 .drill* 命名空间，颜色全部取自 :root 的终端配色                  */
+/* ------------------------------------------------------------------ */
+
+/* ---------------------------- 入口选择 ---------------------------- */
+
+.drill-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.drill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--bg-1), var(--bg-0));
+  color: var(--text-1);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 110ms ease, background 110ms ease, transform 60ms ease;
+}
+
+.drill-card:hover {
+  border-color: rgba(76, 141, 255, 0.5);
+  background: linear-gradient(180deg, #12203a, var(--bg-0));
+}
+
+.drill-card:active {
+  transform: translateY(1px);
+}
+
+.drill-card:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.drill-card__kicker {
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.drill-card__name {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.drill-card__blurb {
+  display: block;
+  min-height: 3em;
+  color: var(--text-2);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.drill-card__criteria {
+  display: block;
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+}
+
+.drill-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.drill-card__record {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.drill-card__cta {
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
+/* ---------------------------- 盘中 HUD ---------------------------- */
+
+.drill-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(15, 24, 38, 0.72);
+}
+
+.drill-hud__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.drill-hud__label {
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drill-hud__live {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid rgba(46, 204, 143, 0.45);
+  border-radius: 3px;
+  background: rgba(46, 204, 143, 0.1);
+  color: var(--up);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.drill-hud__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drill-hud__chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg-2);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.drill-hud__chip--ok {
+  border-color: rgba(46, 204, 143, 0.35);
+}
+
+.drill-hud__chip--ok .drill-hud__chip-value {
+  color: var(--up);
+}
+
+.drill-hud__chip--bad {
+  border-color: rgba(245, 166, 35, 0.4);
+}
+
+.drill-hud__chip--bad .drill-hud__chip-value {
+  color: var(--warn);
+}
+
+.drill-hud__chip-label {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.drill-hud__chip-value {
+  color: var(--text-1);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* ---------------------------- 结算判定 ---------------------------- */
+
+.drill-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #101b2c, #0a1220);
+}
+
+.drill-verdict__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+}
+
+.drill-verdict__eyebrow {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.drill-verdict__name {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.drill-verdict__badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.drill-verdict__badge--pass {
+  border-color: rgba(46, 204, 143, 0.55);
+  background: rgba(46, 204, 143, 0.12);
+  color: var(--up);
+}
+
+.drill-verdict__badge--fail {
+  border-color: rgba(255, 92, 108, 0.55);
+  background: rgba(255, 92, 108, 0.12);
+  color: var(--down);
+}
+
+.drill-verdict__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drill-verdict__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.drill-verdict__tick {
+  flex: none;
+  width: 12px;
+  font-size: 10px;
+  text-align: center;
+}
+
+.drill-verdict__tick--ok {
+  color: var(--up);
+}
+
+.drill-verdict__tick--bad {
+  color: var(--down);
+}
+
+.drill-verdict__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drill-verdict__values {
+  flex: none;
+  color: var(--text-2);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.drill-verdict__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.drill-verdict__record {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.drill-verdict__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.drill-verdict__btn {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #132033;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: border-color 110ms ease, background 110ms ease;
+}
+
+.drill-verdict__btn:hover {
+  border-color: var(--accent);
+  background: #17273d;
+}
+
+.drill-verdict__btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.drill-verdict__btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #04101f;
+  font-weight: 700;
+}
+
+.drill-verdict__btn--primary:hover {
+  border-color: #6ba0ff;
+  background: #6ba0ff;
+}
+
+/* ---------------------------- 窄屏 / 1280 布局 ---------------------------- */
+
+@media (min-width: 1100px) {
+  /* 1280 宽下五张卡一行铺满，单卡不至于被文字挤爆 */
+  .drill-picker {
+    grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .drill-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .drill-hud {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .drill-hud__metrics {
+    width: 100%;
+  }
+
+  .drill-card__blurb {
+    min-height: 0;
+  }
+
+  .drill-verdict__label {
+    white-space: normal;
+  }
+
+  .drill-verdict__badge {
+    margin-left: 0;
+  }
+}
+
+/* Lead 调整：五张卡挤成一行时文字太窄，按 3+2 排、卡宽一点更好读 */
+.drill-picker {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+@media (min-width: 1100px) {
+  .drill-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

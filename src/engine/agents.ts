@@ -81,17 +81,45 @@ const AGENT_TEMPLATES: Array<{
   size: number
   aggression: number
 }> = [
+  // 知情：跟着刚出的头条做
   { name: 'Sable', archetype: 'informed', size: 260, aggression: 0.85 },
   { name: 'Quill', archetype: 'informed', size: 220, aggression: 0.7 },
+  { name: 'Cypher', archetype: 'informed', size: 240, aggression: 0.78 },
+  { name: 'Oracle', archetype: 'informed', size: 200, aggression: 0.66 },
+  { name: 'Whisper', archetype: 'informed', size: 180, aggression: 0.6 },
+  { name: 'Compass', archetype: 'informed', size: 160, aggression: 0.52 },
+  // 动量：追已经走出来的行情
   { name: 'Vector', archetype: 'momentum', size: 200, aggression: 0.8 },
   { name: 'Comet', archetype: 'momentum', size: 170, aggression: 0.62 },
+  { name: 'Chase', archetype: 'momentum', size: 190, aggression: 0.72 },
+  { name: 'Tempo', archetype: 'momentum', size: 150, aggression: 0.58 },
+  { name: 'Arrow', archetype: 'momentum', size: 140, aggression: 0.5 },
+  { name: 'Rocket', archetype: 'momentum', size: 130, aggression: 0.46 },
+  // 价值：价格偏离开盘价就逆势接
   { name: 'Anchor', archetype: 'value', size: 240, aggression: 0.55 },
   { name: 'Ledger', archetype: 'value', size: 210, aggression: 0.5 },
+  { name: 'Ballast', archetype: 'value', size: 220, aggression: 0.52 },
+  { name: 'Merit', archetype: 'value', size: 180, aggression: 0.45 },
+  { name: 'Stone', archetype: 'value', size: 160, aggression: 0.4 },
+  { name: 'Prism', archetype: 'value', size: 140, aggression: 0.38 },
+  // 做市：和短期波动做对手盘
   { name: 'Pylon', archetype: 'maker', size: 180, aggression: 0.9 },
   { name: 'Harbor', archetype: 'maker', size: 160, aggression: 0.75 },
+  { name: 'Quarry', archetype: 'maker', size: 170, aggression: 0.8 },
+  { name: 'Anvil', archetype: 'maker', size: 150, aggression: 0.7 },
+  { name: 'Beacon', archetype: 'maker', size: 140, aggression: 0.62 },
+  { name: 'Serif', archetype: 'maker', size: 120, aggression: 0.55 },
+  // 噪音：随机交易，提供背景流量
   { name: 'Fizz', archetype: 'noise', size: 120, aggression: 0.65 },
   { name: 'Drift', archetype: 'noise', size: 100, aggression: 0.45 },
+  { name: 'Buzz', archetype: 'noise', size: 110, aggression: 0.58 },
+  { name: 'Static', archetype: 'noise', size: 90, aggression: 0.5 },
+  { name: 'Wisp', archetype: 'noise', size: 80, aggression: 0.42 },
+  { name: 'Echo', archetype: 'noise', size: 70, aggression: 0.36 },
 ]
+
+/** 台面里的机器交易员数量：一起决定 FLOW 抽屉的 ACTIVE n/30 与测试口径 */
+export const AGENT_COUNT = AGENT_TEMPLATES.length
 
 const START_CASH = 1_000_000
 /** 每个 agent 的持仓名义金额上限（相对起始资金），超了只能减仓 */

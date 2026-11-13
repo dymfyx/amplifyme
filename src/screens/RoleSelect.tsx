@@ -4,6 +4,9 @@ import { SESSION_TIERS, type SessionMinutes } from '../engine/simulation'
 import { SCENARIOS, scenarioById, type Scenario } from '../engine/scenarios'
 import { LANGUAGES, languageLabel, useT, type Language } from '../i18n'
 import ScenarioPicker from '../components/ScenarioPicker'
+import DrillPicker from '../components/DrillPicker'
+import { DRILLS, type DrillId } from '../train/drills'
+import type { DrillRecords } from '../train/records'
 import CustomScenarioModal from '../components/CustomScenarioModal'
 
 interface RoleOption {
@@ -42,6 +45,8 @@ const ROLE_OPTIONS: RoleOption[] = [
   },
 ]
 
+export type EntryMode = 'simulate' | 'train'
+
 interface RoleSelectProps {
   language: Language
   minutes: SessionMinutes
@@ -49,6 +54,12 @@ interface RoleSelectProps {
   onLanguage: (language: Language) => void
   onMinutes: (minutes: SessionMinutes) => void
   onScenario: (scenario: Scenario) => void
+  /** 入口模式：自由模拟，或按 drill 训练 */
+  mode: EntryMode
+  onMode: (mode: EntryMode) => void
+  /** 训练模式的记录（只用于卡片上的最佳成绩） */
+  drillRecords: DrillRecords
+  onStartDrill: (id: DrillId) => void
   /** 本地存档里已有多少条记录 */
   archiveCount: number
   onOpenArchive: () => void
@@ -59,6 +70,10 @@ export default function RoleSelect({
   language,
   minutes,
   scenario,
+  mode,
+  onMode,
+  drillRecords,
+  onStartDrill,
   onLanguage,
   onMinutes,
   onScenario,
@@ -76,14 +91,37 @@ export default function RoleSelect({
           <div>
             <h1 className="role-select__title">{t('Market Simulation')}</h1>
             <p className="role-select__subtitle">
-              {t('Pick a desk to open the session — {minutes} minutes, 15 simulated trading days, 5 names.', {
-                minutes,
-              })}
+              {mode === 'train'
+                ? t('Pick a drill to run a focused five-minute session with a fixed seed.')
+                : t('Pick a desk to open the session — {minutes} minutes, 15 simulated trading days, 5 names.', {
+                    minutes,
+                  })}
             </p>
           </div>
         </header>
 
         <div className="entry-settings">
+          <div className="entry-settings__group" role="group" aria-label="Mode">
+            <span className="entry-settings__label">{t('MODE')}</span>
+            <button
+              type="button"
+              className={mode === 'simulate' ? 'chip chip--on' : 'chip'}
+              aria-pressed={mode === 'simulate'}
+              aria-label="Simulate mode"
+              onClick={() => onMode('simulate')}
+            >
+              {t('SIMULATE')}
+            </button>
+            <button
+              type="button"
+              className={mode === 'train' ? 'chip chip--on' : 'chip'}
+              aria-pressed={mode === 'train'}
+              aria-label="Train mode"
+              onClick={() => onMode('train')}
+            >
+              {t('TRAIN')}
+            </button>
+          </div>
           <div className="entry-settings__group" role="group" aria-label="Language">
             <span className="entry-settings__label">{t('LANGUAGE')}</span>
             {LANGUAGES.map((option) => (
@@ -99,56 +137,64 @@ export default function RoleSelect({
               </button>
             ))}
           </div>
-          <div className="entry-settings__group" role="group" aria-label="Session length">
-            <span className="entry-settings__label">{t('SESSION LENGTH')}</span>
-            {SESSION_TIERS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={minutes === option ? 'chip chip--on' : 'chip'}
-                aria-pressed={minutes === option}
-                aria-label={`${option} minute session`}
-                onClick={() => onMinutes(option)}
-              >
-                {t('{minutes} MIN', { minutes: option })}
-              </button>
-            ))}
-          </div>
+          {mode === 'simulate' ? (
+            <div className="entry-settings__group" role="group" aria-label="Session length">
+              <span className="entry-settings__label">{t('SESSION LENGTH')}</span>
+              {SESSION_TIERS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={minutes === option ? 'chip chip--on' : 'chip'}
+                  aria-pressed={minutes === option}
+                  aria-label={`${option} minute session`}
+                  onClick={() => onMinutes(option)}
+                >
+                  {t('{minutes} MIN', { minutes: option })}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        <ScenarioPicker
-          scenarios={SCENARIOS}
-          selectedId={scenario.id}
-          onSelect={(id) => onScenario(scenarioById(id))}
-          onOpenCustom={() => setCustomOpen(true)}
-        />
+        {mode === 'train' ? (
+          <DrillPicker drills={DRILLS} best={drillRecords} onStart={onStartDrill} />
+        ) : (
+          <>
+            <ScenarioPicker
+              scenarios={SCENARIOS}
+              selectedId={scenario.id}
+              onSelect={(id) => onScenario(scenarioById(id))}
+              onOpenCustom={() => setCustomOpen(true)}
+            />
 
-        <div className="role-grid">
-          {ROLE_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className="role-card"
-              onClick={() => onSelect(option.id)}
-              aria-label={`Start as ${option.title}`}
-            >
-              {/* 台面代号是行业缩写，中英文都保留原样 */}
-              <span className="role-card__tag">{option.tag}</span>
-              <span className="role-card__title">{t(option.title)}</span>
-              <span className="role-card__subtitle">{t(option.subtitle)}</span>
-              <span className="role-card__blurb">{t(option.blurb)}</span>
-              <span className="role-card__bullets">
-                {option.bullets.map((bullet) => (
-                  <span key={bullet} className="role-card__bullet">
-                    <i className="role-card__tick">+</i>
-                    {t(bullet)}
+            <div className="role-grid">
+              {ROLE_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="role-card"
+                  onClick={() => onSelect(option.id)}
+                  aria-label={`Start as ${option.title}`}
+                >
+                  {/* 台面代号是行业缩写，中英文都保留原样 */}
+                  <span className="role-card__tag">{option.tag}</span>
+                  <span className="role-card__title">{t(option.title)}</span>
+                  <span className="role-card__subtitle">{t(option.subtitle)}</span>
+                  <span className="role-card__blurb">{t(option.blurb)}</span>
+                  <span className="role-card__bullets">
+                    {option.bullets.map((bullet) => (
+                      <span key={bullet} className="role-card__bullet">
+                        <i className="role-card__tick">+</i>
+                        {t(bullet)}
+                      </span>
+                    ))}
                   </span>
-                ))}
-              </span>
-              <span className="role-card__cta">{t('ENTER DESK →')}</span>
-            </button>
-          ))}
-        </div>
+                  <span className="role-card__cta">{t('ENTER DESK →')}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <footer className="role-select__footer">
           <span>{t('SCENARIO · REAL-WORLD EVENT REPLAY')}</span>

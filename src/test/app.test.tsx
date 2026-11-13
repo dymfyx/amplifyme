@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import StatusBar from '../components/StatusBar'
 import { readArchive, readSettings } from '../storage/archive'
+import { readDrillRecords } from '../train/records'
 
 beforeEach(() => {
   // 语言/时长/剧本现在会存进本地设置，测试之间必须清掉，否则上一条用例的语言会漏到下一��
@@ -514,5 +515,49 @@ describe('local archive', () => {
     fireEvent.click(screen.getByRole('button', { name: 'EXIT DESK' }))
     fireEvent.click(screen.getByRole('button', { name: /^ARCHIVE \(1\)$/ }))
     expect(screen.getAllByText(/Sales/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('training mode', () => {
+  it('lists the five drills after switching the entry to TRAIN', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Train mode' }))
+
+    expect(screen.getByRole('button', { name: 'Start drill: Quote discipline' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start drill: Headline reaction' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start drill: Inventory control' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start drill: Adverse selection' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start drill: Two venues' })).toBeInTheDocument()
+  })
+
+  it('starts a drill straight into a five minute session with the HUD up', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Train mode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start drill: Quote discipline' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('TRAIN · Quote discipline')
+    expect(screen.getByText('05:00')).toBeInTheDocument()
+    expect(screen.getByText(/Quotes sent/i)).toBeInTheDocument()
+  })
+
+  it('fails the drill at the close, records the attempt and returns to the list', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Train mode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start drill: Quote discipline' }))
+
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+
+    expect(screen.getByText('DRILL RESULT')).toBeInTheDocument()
+    expect(screen.getByText('FAILED')).toBeInTheDocument()
+
+    const records = readDrillRecords()
+    expect(records['quote-discipline']).toMatchObject({ attempts: 1, passes: 0 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'BACK TO DRILLS' }))
+    expect(screen.getByRole('button', { name: 'Start drill: Quote discipline' })).toBeInTheDocument()
+    expect(screen.getByText(/ATTEMPTS 1/)).toBeInTheDocument()
   })
 })

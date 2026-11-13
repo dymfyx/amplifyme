@@ -35,7 +35,10 @@ import { NEWS_REACTION_TICKS } from '../engine/telemetry'
 import { useT } from '../i18n'
 import { useSimulation } from '../hooks/useSimulation'
 import { makeSessionId, type ArchivedSession } from '../storage/archive'
+import { drillProgress, type Drill, type DrillId } from '../train/drills'
+import type { DrillRecord } from '../train/records'
 import ChartPanel from '../components/ChartPanel'
+import DrillHud from '../components/DrillHud'
 import BookPanel from '../components/BookPanel'
 import DispatchPanel from '../components/DispatchPanel'
 import EventFeed from '../components/EventFeed'
@@ -63,6 +66,14 @@ interface TerminalProps {
   minutes?: SessionMinutes
   /** 本局的情景剧本：新闻时间轴、价差/流动性系数都由它决定 */
   scenario: Scenario
+  /** 训练模式：这一局对应的 drill（盘中 HUD 与结算判定都用它） */
+  drill?: Drill | null
+  /** 该 drill 的历史记录：结算时用来显示尝试/通过次数 */
+  drillRecord?: DrillRecord | null
+  /** 结算时回报一次成绩，返回写入后的记录 */
+  onDrillResult?: (id: DrillId, passed: boolean, composite: number) => DrillRecord | null
+  /** 训练结束后回到 drill 列表 */
+  onExitDrill?: () => void
   /** 本局结算后自动写入本地存档 */
   onSessionSaved?: (session: ArchivedSession) => void
   onExit: () => void
@@ -74,6 +85,10 @@ export default function Terminal({
   seed = null,
   minutes = DEFAULT_MINUTES,
   scenario,
+  drill = null,
+  drillRecord = null,
+  onDrillResult,
+  onExitDrill,
   onSessionSaved,
   onExit,
 }: TerminalProps) {
@@ -116,6 +131,20 @@ export default function Terminal({
   const history = selectHistory(state)
   const agents = selectAgents(state)
   /* 每次结算写一条本地存档：同 seed/剧本/时长且同一收盘点的重复渲染只写一次 */
+  /* 训练模式的盘中进度与一次性成绩回报（重开一局会重新记一次 attempt） */
+  const progress = drill ? drillProgress(drill, state) : null
+  const restartsRef = useRef(0)
+  const recordedRef = useRef<string | null>(null)
+  const [drillResult, setDrillResult] = useState<{ attempts: number; passes: number } | null>(null)
+  useEffect(() => {
+    if (!drill || !closed || !onDrillResult) return
+    const key = `${drill.id}:${state.seed}:${restartsRef.current}`
+    if (recordedRef.current === key) return
+    recordedRef.current = key
+    const record = onDrillResult(drill.id, progress?.passed ?? false, score.composite)
+    if (record) setDrillResult({ attempts: record.attempts, passes: record.passes })
+  })
+
   const savedIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!closed || !onSessionSaved) return
@@ -248,6 +277,8 @@ export default function Terminal({
         onExit={onExit}
       />
 
+      {drill && progress ? <DrillHud drill={drill} progress={progress} /> : null}
+
       <main className="workspace">
         <aside className="rail rail--left">
           <MarketWatch
@@ -335,6 +366,12 @@ export default function Terminal({
           coaching={coachingText}
           review={review}
           scenarioName={t(scenarioMeta.name)}
+          drill={drill}
+          drillProgress={progress}
+          drillAttempts={drillResult?.attempts ?? drillRecord?.attempts ?? 0}
+          drillPasses={drillResult?.passes ?? drillRecord?.passes ?? 0}
+          onDrillRetry={handleRestart}
+          onDrillExit={onExitDrill}
           onRestart={handleRestart}
           onClose={() => setReportDismissed(true)}
         />

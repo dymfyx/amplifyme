@@ -607,3 +607,17 @@ P0 已交付：
 - UI：入口页 `ARCHIVE (n)` → `ArchiveDrawer`（EXPORT / IMPORT / LINK ARCHIVE FILE、行展开 14 项详情、DELETE / CLEAR ALL 二次确认、ESC 关闭）；入口页同时记住上次的语言、时长与剧本。
 - 结算自动存档：`Terminal` 在 `status === 'CLOSED'` 时用 `selectSettlement / scoreSession / decisionReview` 组装一条记录并 upsert（同 id 只写一次）。
 - 测试：`archive.test.ts` 24 例 + `archive-drawer.test.tsx` 11 例 + app 4 例；全量 **194** 例，`npm run build` 产出 `index-htgGvodo.js 380.6 kB │ gzip 119.4 kB`。
+
+## 22. 训练模式（P2.12）
+
+- 入口新增 `MODE`：`SIMULATE`（自由模拟，原有流程）与 `TRAIN`（五道 drill）。切到 TRAIN 后隐藏台面卡、时长与剧本，换成 `DrillPicker`；点卡片直接开局，跳过开局仓位页。
+- 五道 drill（`src/train/drills.ts` 的 `DRILLS`）各自固定 desk / 5 分钟 / 种子 / 剧本 / 开局仓位，判定指标全部由 `selectSettlement` 与 `decisionReview` 派生：
+  - Quote discipline（MM, 1042, classic）：报价次数 ≥ 8、1.8 倍市场价差内占比 ≥ 90%。
+  - Headline reaction（MM, 2213, fomc）：已交易头条 ≥ 4、回应比例 ≥ 60%。
+  - Inventory control（MM, 3307, classic，开局 TSLA +1500）：收盘最大持仓 ≤ 300 股。
+  - Adverse selection（MM, 4409, crash）：成交即被套 ≤ 2 次、alpha > 0。
+  - Two venues（Sales, 5501, classic）：交易所对冲的客户名义额 ≥ 80%、价差捕获 > 0。
+- 盘中 `DrillHud`（`role="status"`）显示每个指标的 `current / target`，达标变绿；结算报告在基准对比下插入 `DrillVerdict`（PASSED/FAILED、逐条指标、`ATTEMPTS n · PASSED m`、`RETRY DRILL` / `BACK TO DRILLS`）。
+- 记录存在 `market-sim.drills.v1`（`src/train/records.ts`），卡片显示「尚未尝试 / 尝试 n 次 · 通过 m 次 / 最佳综合分」。
+- 智能体从 10 扩到 30（每个 archetype 6 个）：`AGENT_COUNT = 30`，聚合流量与成交量分别乘 `AGENT_FLOW_SCALE = 0.5` / `AGENT_VOLUME_SCALE = 0.25`，保持与 10 人同一量级的波动；`FLOW` 抽屉显示 `ACTIVE n/30`。
+- 测试：新增 `src/engine/drills.test.ts`（8 例：单位格式化、drill 解析、报价纪律指标、库存上限正反例、头条计数、两条腿对冲、记录读写与坏数据回退）与 `src/test/app.test.tsx` 的 `describe('training mode')`（3 例：TRAIN 列表、开局 HUD、结算判定 + 记录 + 返回列表）。全量 **216 例**。

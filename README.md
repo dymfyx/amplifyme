@@ -399,17 +399,17 @@ The LIVE QUOTES blotter shows the latency countdown, queue length and `filled/qu
 fill or headline. The settlement report adds a **DECISION REVIEW** block: fills that were immediately run over
 (picked off), headlines you never traded, your worst drawdown and the informed-flow count.
 
-### Machine flow: ten trading agents
+### Machine flow: thirty trading agents
 
-`FLOW` in the top bar opens a desk-level view of ten rule-based trading agents that run inside the same engine:
+`FLOW` in the top bar opens a desk-level view of thirty rule-based trading agents that run inside the same engine:
 
 | Agent | Archetype | What it does |
 | --- | --- | --- |
-| Sable, Quill | informed | Trade the name that just moved, in the direction of fresh news |
-| Vector, Comet | momentum | Chase a move once it is already in the tape |
-| Anchor, Ledger | value | Fade a move when price stretches from the open |
-| Pylon, Harbor | market maker | Lean against short-term volatility, take the other side |
-| Fizz, Drift | noise | Trade at random, provide background flow |
+| Sable, Quill, Cypher, Oracle, Whisper, Compass | informed | Trade the name that just moved, in the direction of fresh news |
+| Vector, Comet, Chase, Tempo, Arrow, Rocket | momentum | Chase a move once it is already in the tape |
+| Anchor, Ledger, Ballast, Merit, Stone, Prism | value | Fade a move when price stretches from the open |
+| Pylon, Harbor, Quarry, Anvil, Beacon, Serif | market maker | Lean against short-term volatility, take the other side |
+| Fizz, Drift, Buzz, Static, Wisp, Echo | noise | Trade at random, provide background flow |
 
 Each agent has its own cash, inventory and cooldown. Their fills are priced off the touch, aggregated per symbol
 and released into the tape as a `PriceImpulse` (source `agent`), so they move the market exactly like headlines
@@ -417,7 +417,7 @@ do — and their size also eats the queue in front of your quotes, which makes y
 names. The price tape labels the flow by archetype (`informed buy`, `momentum sell`, …), and fills that land on
 your client quotes carry the counterparty agent name in the telemetry.
 
-The FLOW drawer shows live inventory, gross exposure, P&L and last action for all ten. Everything is seeded
+The FLOW drawer shows live inventory, gross exposure, P&L and last action for all thirty (AGENT_COUNT). Everything is seeded
 deterministically: the same `seed` produces the same agents, the same decisions and the same price path.
 
 ### Local archive: every session is kept
@@ -442,3 +442,17 @@ single-file build each start from an empty archive.
 
 The entry screen also remembers the last language, session length and scenario in
 `market-sim.settings.v1`, so you do not re-pick them every visit.
+
+### Training mode: five drills
+
+The entry screen has a MODE toggle: `SIMULATE` is the free-form desk, `TRAIN` swaps the desk cards for five focused drills. Every drill pins its own desk, five-minute timer, seed, scenario and opening book, so a retry is the same problem until it passes.
+
+| Drill | Desk | Seed | Scenario | Passing bar |
+| --- | --- | --- | --- | --- |
+| Quote discipline | Market Maker | 1042 | Classic | 8+ quotes sent, 90% inside 1.8x the market spread |
+| Headline reaction | Market Maker | 2213 | FOMC day | 4+ headlines traded, 60% of headlines answered |
+| Inventory control | Market Maker | 3307 | Classic, starts long 1,500 TSLA | Largest position at the close <= 300 shares |
+| Adverse selection | Market Maker | 4409 | Risk-off crash | Picked off at most twice, alpha vs buy & hold > $0 |
+| Two venues | Sales | 5501 | Classic | 80%+ of client notional hedged on the exchange, spread capture > $0 |
+
+While a drill runs a `TRAIN` strip sits under the top bar with its live metrics (`current / target`, green when the bar is met). The settlement report puts the verdict card right under the benchmark: `PASSED` / `FAILED`, one row per criterion, `ATTEMPTS n · PASSED m`, plus `RETRY DRILL` and `BACK TO DRILLS`. Attempts and best composite live in `market-sim.drills.v1` in localStorage; the drill picker shows the record on each card.

@@ -131,6 +131,9 @@ const QUEUE_FLOW_MIN = 1.5
 const QUEUE_FLOW_MAX = 5.5
 /** 回放用的价格快照上限（30 分钟档 7200 帧以内） */
 export const HISTORY_LIMIT = 8000
+/* 30 个智能体聚合后的流量/成交量缩放：人多但盘口深度不变，避免把行情打飞 */
+const AGENT_FLOW_SCALE = 0.5
+const AGENT_VOLUME_SCALE = 0.25
 
 const round2 = (value: number) => Math.round(value * 100) / 100
 const pad = (value: number) => String(Math.floor(value)).padStart(2, '0')
@@ -847,8 +850,11 @@ export function stepSession(state: SimulationState): SimulationState {
           }
         }
 
-        /* 这一帧里 10 个流式智能体在同一标的上的净流量 */
-        const agentFlow = agentFlowBySymbol.get(instrument.symbol) ?? null
+        /* 这一帧里 30 个流式智能体在同一标的上的净流量；按人数缩放，保持和 10 人时同一量级的波动 */
+        const rawAgentFlow = agentFlowBySymbol.get(instrument.symbol) ?? null
+        const agentFlow = rawAgentFlow
+          ? { ...rawAgentFlow, bps: round2(rawAgentFlow.bps * AGENT_FLOW_SCALE) }
+          : null
         const agentDriver: PriceDriver | null = agentFlow
           ? {
               label: agentFlow.label,
@@ -964,7 +970,7 @@ export function stepSession(state: SimulationState): SimulationState {
     const [volRoll, afterVol] = nextRandom(rng)
     rng = afterVol
     /* 智能体的主动单也在消耗盘口，所以它们活跃时我们的报价更容易被成交 */
-    const agentVolume = Math.round((agentVolumeBySymbol.get(quote.symbol) ?? 0) * 0.5)
+    const agentVolume = Math.round((agentVolumeBySymbol.get(quote.symbol) ?? 0) * AGENT_VOLUME_SCALE)
     const marketVolume =
       Math.round(lot * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN))) + agentVolume
     const queueBefore = quote.queueAhead
