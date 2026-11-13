@@ -7,3 +7,6 @@ coverage/
 .vite/
 
 .tmp/
+
+# LibreOffice Kit render scratch
+.dsh-office-*/
