@@ -622,3 +622,26 @@ describe('difficulty tiers', () => {
     expect(screen.getAllByText(/SESSION COMPLETE/).length).toBeGreaterThan(0)
   })
 })
+describe('exchange mandate feedback', () => {
+  it('lets a no-shorting tier click sell and explains the rejection', () => {
+    window.location.hash = '#sales?tier=1&minutes=5'
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Exchange SELL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'SELL AT MARKET' }))
+    expect(screen.getAllByText(/NO SHORTING · retail accounts/).length).toBeGreaterThan(0)
+  })
+
+  it('lets a reduce-only desk click buy and explains the mandate', () => {
+    window.location.hash = '#market-maker?tier=4&minutes=5'
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'BUY AT MARKET' }))
+    expect(screen.getAllByText(/only lets the desk reduce risk/).length).toBeGreaterThan(0)
+  })
+
+  it('still fills a normal market order on tier two', () => {
+    window.location.hash = '#sales?tier=2&minutes=5'
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'BUY AT MARKET' }))
+    expect(screen.getByText(/EXCHANGE FILLED/)).toBeInTheDocument()
+  })
+})

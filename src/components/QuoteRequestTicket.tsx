@@ -129,6 +129,11 @@ export default function QuoteRequestTicket({
                 </button>
               </div>
             </div>
+            <p className="ticket__note">
+              {t(
+                'This ticket only asks dealers for a price — hit a quote in panel 3, or trade the exchange in panel 5.',
+              )}
+            </p>
           </>
         ) : (
           <div className="table-wrap">

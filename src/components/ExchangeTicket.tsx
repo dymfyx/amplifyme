@@ -65,7 +65,28 @@ export default function ExchangeTicket({
     tier.exchangeMode === 'reduce-only'
       ? !reduces
       : !tier.allowShort && side === 'SELL' && requested > Math.max(0, netQty)
-  const canTrade = requested > 0 && price > 0 && requested <= liquidity && !capHit && !mandateBlocked
+  /*
+   * 不把按钮锁死：点下去让引擎把拒绝原因说出来（限额 / 权限 / 盘口不够），
+   * 否则用户只看到一颗灰色按钮，不知道是坏了还是不能做。
+   */
+  const ready = requested > 0 && price > 0
+  const blockedReason = mandateBlocked
+    ? tier.exchangeMode === 'reduce-only'
+      ? t('EXCHANGE LIMIT · this mandate only lets the desk reduce risk on the exchange')
+      : t('NO SHORTING · retail accounts can only sell what they already hold')
+    : capHit
+      ? t('This mandate caps a single order at {n} shares', {
+          n: tier.maxExchangeQty.toLocaleString('en-US'),
+        })
+      : requested > liquidity
+        ? t('Only {n} {symbol} on this side of the book', {
+            n: liquidity.toLocaleString('en-US'),
+            symbol: instrument.symbol,
+          })
+        : null
+
+  /* 提示行已经说明原因时，不再把同一句拒绝话重复一遍 */
+  const visibleFlash = flash && flash !== blockedReason ? flash : null
 
   const submit = () => {
     setFlash(onTrade({ symbol: instrument.symbol, side, qty: requested }))
@@ -147,6 +168,12 @@ export default function ExchangeTicket({
           </label>
         </div>
 
+        {blockedReason ? (
+          <p className="exchange__hint" role="status">
+            {blockedReason}
+          </p>
+        ) : null}
+
         <div className="ticket__summary">
           <div className="stat" title={t('Your buy price minus your sell price right now')}>
             <span className="stat__label">{t('YOUR SPREAD')}</span>
@@ -171,15 +198,22 @@ export default function ExchangeTicket({
             <span className="stat__value stat__value--live">${money(cash)}</span>
           </div>
           <div className="ticket__actions">
-            <button type="button" className="btn btn--primary" onClick={submit} disabled={!canTrade}>
+            <button type="button" className="btn btn--primary" onClick={submit} disabled={!ready}>
               {t(side === 'BUY' ? 'BUY AT MARKET' : 'SELL AT MARKET')}
             </button>
           </div>
         </div>
 
-        {flash ? (
-          <p className={flash.includes('REJECTED') ? 'ticket__flash ticket__flash--warn' : 'ticket__flash'} role="status">
-            {flash}
+        {visibleFlash ? (
+          <p
+            className={
+              /LIMIT|NO SHORTING|RISK LIMIT|REJECTED/.test(visibleFlash)
+                ? 'ticket__flash ticket__flash--warn'
+                : 'ticket__flash'
+            }
+            role="status"
+          >
+            {visibleFlash}
           </p>
         ) : null}
       </div>

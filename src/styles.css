@@ -2508,3 +2508,18 @@ table.grid.grid--setup tbody tr:last-child td {
     font-size: 13px;
   }
 }
+.exchange__hint {
+  margin: 0 0 6px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--warn);
+  background: rgba(245, 166, 35, 0.08);
+  color: var(--warn);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+.ticket__note {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.5;
+}
