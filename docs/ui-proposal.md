@@ -556,3 +556,33 @@ P0 已交付：
 - 台账：RECENT FILLS 与 BOOK 的 TRADES 增加 `VENUE` 徽标列（客户=蓝、交易所=橙）。
 - 结算报告：FLOW 卡新增 `Venue split` 与 `Spread capture`（Σ edge×qty，负数标红）；`Hit ratio` / `Avg edge` 只统计客户流成交，避免主动吃单的负 edge 污染报价质量指标。
 - 测试：`src/engine/exchange.test.ts` 9 例 + app 4 例（面板渲染、市价成交消息与徽标、客户徽标、中文标签），全量 118 例。
+
+
+## 19. 场景库、微观结构与回放（P2.10）
+
+需求（2026-11-13）：「客户端要做得更真实 —— 客户流和新闻联动、报价有延迟和队列、能回放复盘，再加场景库和自定义场景 JSON」。
+
+### 场景库
+
+- `src/engine/scenarios.ts`：`Scenario { id, name, blurb, news[], spreadMultiplier?, liquidityMultiplier? }`，新闻条目用 `at`（0–1 的会话进度）+ `kind/tag/impact/headline/short/direction/symbol/driftBps`。
+- 内置 5 个剧本：Classic（沿用 20 条老新闻）、FOMC day、Earnings surprise、Risk-off crash（价差 ×2.2、盘口深度 ×0.55）、Short squeeze（×1.6 / ×0.75）。
+- `parseScenarioJson(text)` 做完整校验（at 范围、kind、impact 1–3、symbol 必须在 `UNIVERSE` 里、driftBps 0–500、新闻 1–40 条、乘数 0.2–5），错误信息带 `news[i].field` 前缀。
+- 入口页 `ScenarioPicker` + `CustomScenarioModal`；深链支持 `&scenario=crash`，与 `seed`/`lang`/`minutes` 组合。
+
+### 客户流 × 新闻
+
+- 头条到点后给标的记一笔带方向的 `newsBias`（`driftBps × volScale(sigma)`，每帧 ×0.98 衰减）。
+- 派单时若存在 |bias| ≥ 8 的热名，有 75% 概率派 **informed** 客户：挑最热的名字、方向跟随新闻、量大（1500–2500 股），派单间隔缩到 1000–2400 模拟秒；否则是 uninformed 客户（随机名、500–2000 股）。
+- `clientHeat` 记录客户怨气：报价过宽（spreadRatio > 2.2）或拒单会 +，成交会 −，每次派单 ×0.85 衰减；派单按 `1/(1+heat)` 加权。客户耐心（`patience`）决定 RFQ 存活时间。
+
+### 报价生命周期
+
+- `PENDING`（延迟 1–3 tick）→ `LIVE`（`queueAhead` = 同价或更优价位的挂单量）→ 每帧用 `marketVolume = lot × (1.5 + 4 × roll)` 消耗队列，队列清空后按 `priceCompetitiveness × (0.5 + 0.5 × fillProbability) × tolerance` 概率部分成交 → `FILLED` / `PARTIAL` / `EXPIRED`。
+- 每次部分成交都写 trade/order/telemetry、扣佣金、执行成交冲击，所以一张报价可能对应多条成交记录；LIVE QUOTES 显示延迟倒数、`Q<size>` 和 `filled/quoted`。
+
+### 回放与决策审阅
+
+- `SimulationState.history: PriceFrame[]`（每 tick 一帧，上限 8000 帧，含 5 个标的最新价）。
+- `ReplayDrawer`：标的切换、时间轴拖动、事件竖线、决策菱形、播放头、决策日志（点击跳到对应帧）。
+- `decisionReview(state)` 输出 `adverse`（客户成交后 20 tick 内被逆向打穿的前 3 笔）、`missed`（未交易的单名头条与窗口内潜在收益）、`worstDrawdown`、`informed` 计数；结算报告新增 DECISION REVIEW 卡。
+- 测试：`src/engine/flow.test.ts` 9 例新增，加 UI 与既有 engine 用例共 **142** 例；`npm run build` 产出 `index-BKjNei9C.js 350.5 kB │ gzip 109.1 kB`。

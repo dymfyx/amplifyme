@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import type { Role } from '../types'
 import { SESSION_TIERS, type SessionMinutes } from '../engine/simulation'
+import { SCENARIOS, scenarioById, type Scenario } from '../engine/scenarios'
 import { LANGUAGES, languageLabel, useT, type Language } from '../i18n'
+import ScenarioPicker from '../components/ScenarioPicker'
+import CustomScenarioModal from '../components/CustomScenarioModal'
 
 interface RoleOption {
   id: Role
@@ -41,19 +45,24 @@ const ROLE_OPTIONS: RoleOption[] = [
 interface RoleSelectProps {
   language: Language
   minutes: SessionMinutes
+  scenario: Scenario
   onLanguage: (language: Language) => void
   onMinutes: (minutes: SessionMinutes) => void
+  onScenario: (scenario: Scenario) => void
   onSelect: (role: Role) => void
 }
 
 export default function RoleSelect({
   language,
   minutes,
+  scenario,
   onLanguage,
   onMinutes,
+  onScenario,
   onSelect,
 }: RoleSelectProps) {
   const t = useT()
+  const [customOpen, setCustomOpen] = useState(false)
   return (
     <main className="role-select">
       <div className="role-select__inner">
@@ -102,6 +111,13 @@ export default function RoleSelect({
           </div>
         </div>
 
+        <ScenarioPicker
+          scenarios={SCENARIOS}
+          selectedId={scenario.id}
+          onSelect={(id) => onScenario(scenarioById(id))}
+          onOpenCustom={() => setCustomOpen(true)}
+        />
+
         <div className="role-grid">
           {ROLE_OPTIONS.map((option) => (
             <button
@@ -111,7 +127,7 @@ export default function RoleSelect({
               onClick={() => onSelect(option.id)}
               aria-label={`Start as ${option.title}`}
             >
-                            {/* 台面代号是行业缩写，中英文都保留原样 */}
+              {/* 台面代号是行业缩写，中英文都保留原样 */}
               <span className="role-card__tag">{option.tag}</span>
               <span className="role-card__title">{t(option.title)}</span>
               <span className="role-card__subtitle">{t(option.subtitle)}</span>
@@ -138,6 +154,13 @@ export default function RoleSelect({
           </a>
         </footer>
       </div>
+
+      {customOpen ? (
+        <CustomScenarioModal
+          onClose={() => setCustomOpen(false)}
+          onLoad={(loaded) => onScenario(loaded)}
+        />
+      ) : null}
     </main>
   )
 }

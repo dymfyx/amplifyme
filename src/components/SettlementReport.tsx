@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { ScoreCard } from '../types'
-import type { SettlementStats } from '../engine/scoring'
+import type { DecisionReview, SettlementStats } from '../engine/scoring'
 import { STARTING_CASH } from '../engine/simulation'
 import { useT } from '../i18n'
 
@@ -9,6 +9,9 @@ interface SettlementReportProps {
   stats: SettlementStats
   score: ScoreCard
   coaching: string
+  /** 决策审阅：逆向选择、错过的消息、最大回撤、消息灵通客户占比 */
+  review: DecisionReview
+  scenarioName: string
   onRestart: () => void
   onClose: () => void
 }
@@ -36,6 +39,8 @@ export default function SettlementReport({
   stats,
   score,
   coaching,
+  review,
+  scenarioName,
   onRestart,
   onClose,
 }: SettlementReportProps) {
@@ -211,6 +216,76 @@ export default function SettlementReport({
               </div>
             </dl>
           </article>
+        </div>
+
+        <div className="report__review">
+          <div className="report__review-head">
+            <h3 className="report__card-title">{t('DECISION REVIEW')}</h3>
+            <span className="report__review-scenario">{scenarioName}</span>
+          </div>
+          <div className="report__review-grid">
+            <article className="report__review-block">
+              <span className="report__review-label">{t('PICKED OFF')}</span>
+              {review.adverse.length === 0 ? (
+                <p className="report__review-empty">{t('No client fill was immediately run over.')}</p>
+              ) : (
+                review.adverse.map((fill) => (
+                  <p key={fill.id} className="report__review-row">
+                    <span>
+                      {fill.time} · {fill.side} {fill.qty.toLocaleString('en-US')} {fill.symbol}
+                    </span>
+                    <span className="num--down">-{fill.adverseBps.toFixed(1)} bps</span>
+                  </p>
+                ))
+              )}
+            </article>
+            <article className="report__review-block">
+              <span className="report__review-label">{t('MISSED HEADLINES')}</span>
+              {review.missed.length === 0 ? (
+                <p className="report__review-empty">{t('You traded into every single-name headline.')}</p>
+              ) : (
+                review.missed.map((item) => (
+                  <p key={item.id} className="report__review-row">
+                    <span>
+                      {item.time} · {item.symbol}
+                    </span>
+                    <span className={item.moveBps >= 0 ? 'num--up' : 'num--down'}>
+                      {item.moveBps >= 0 ? '+' : ''}
+                      {item.moveBps.toFixed(1)} bps
+                    </span>
+                  </p>
+                ))
+              )}
+            </article>
+            <article className="report__review-block">
+              <span className="report__review-label">{t('WORST DRAWDOWN')}</span>
+              {review.worstDrawdown ? (
+                <>
+                  <p className="report__review-row">
+                    <span>{review.worstDrawdown.time}</span>
+                    <span className="num--down">{money(-review.worstDrawdown.dollars)}</span>
+                  </p>
+                  <p className="report__review-empty">{t('That is the point where discipline matters most.')}</p>
+                </>
+              ) : (
+                <p className="report__review-empty">{t('No drawdown inside the session.')}</p>
+              )}
+            </article>
+            <article className="report__review-block">
+              <span className="report__review-label">{t('INFORMED FLOW')}</span>
+              <p className="report__review-row">
+                <span>{t('Clients traded on a headline')}</span>
+                <span>
+                  {review.informed.fills}/{review.informed.rfqs}
+                </span>
+              </p>
+              <p className="report__review-empty">
+                {t('These are the calls that hurt most when you are slow. {ticks} ticks is the window.', {
+                  ticks: review.windowTicks,
+                })}
+              </p>
+            </article>
+          </div>
         </div>
 
         <div className="report__score">

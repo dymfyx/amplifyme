@@ -12,9 +12,17 @@ import type {
   TradeRow,
 } from '../types'
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
-import { CLIENTS, DISPATCH_NOTES, FLOW_EVENTS, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
+import { DISPATCH_NOTES, FLOW_EVENTS, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
+import {
+  DEFAULT_CLIENTS,
+  DEFAULT_SCENARIO,
+  type ClientProfile,
+  type ClientType,
+  type Scenario,
+} from './scenarios'
 import {
   createTelemetry,
+  patchQuote,
   recordDecline,
   recordFill,
   recordNews,
@@ -98,8 +106,21 @@ export const CHART_POINTS = 480
 const HISTORY_POINTS = 480
 const MAX_DISPATCH = 3
 const MAX_QUOTES = 14
+/** 没有消息时派单的间隔（模拟秒），有头条时按 INFORMED_INTERVAL_* 提速 */
 const DISPATCH_INTERVAL = 6000
-const DISPATCH_TTL = 9000
+const INFORMED_INTERVAL_MIN = 1000
+const INFORMED_INTERVAL_MAX = 2400
+/** 派单在客户失去耐心前有效（模拟秒），按客户画像的 patience 缩放 */
+const DISPATCH_TTL = 6000
+/** 有热度时派来的客户里有多少是 informed */
+const INFORMED_SHARE = 0.75
+/** 客户画像里 patience 的基准值（对应 DISPATCH_TTL） */
+const PATIENCE_BASE = 15
+/** 排队消耗速度：每帧这个价位附近有多少主动成交量（手数 × 随机倍数） */
+const QUEUE_FLOW_MIN = 1.5
+const QUEUE_FLOW_MAX = 5.5
+/** 回放用的价格快照上限（30 分钟档 7200 帧以内） */
+export const HISTORY_LIMIT = 8000
 
 const round2 = (value: number) => Math.round(value * 100) / 100
 const pad = (value: number) => String(Math.floor(value)).padStart(2, '0')
@@ -194,11 +215,18 @@ export interface LiveQuote extends QuoteRow {
   qty: number
   clientSide: Side
   ttlTicks: number
-  fillInTicks: number
+  /** 报价还在路上：还要等这么多帧才挂到交易所 */
+  latencyTicks: number
   /** 报价宽度相对市场价差的倍数（<1 比市场更紧，>1 更宽） */
   spreadRatio: number
   /** 客户接受这张报价的概率，由 spreadRatio 决定 */
   fillProbability: number
+  /** 背后客户的类型：informed 客户跟着头条来做方向，成交时你大概率被逆向选择 */
+  clientType: ClientType
+  /** 客户对报价宽度的容忍度（乘在成交概率上） */
+  tolerance: number
+  /** 从发出到排到队首用了多少帧 */
+  queueTicks: number
   rfqId?: string
 }
 
@@ -250,6 +278,22 @@ export interface SimulationState {
   counters: { rfq: number; quote: number; order: number; trade: number }
   /** 决策遥测：报价/成交/回撤/新闻响应，评分与结算报告的数据源 */
   telemetry: Telemetry
+  /** 这一局的剧本（场景库或自定义 JSON） */
+  scenario: Scenario
+  /** 客户队伍与「服务态度」记忆：报价太宽/拒单会记住，久不成交会衰减 */
+  clients: ClientProfile[]
+  clientHeat: Record<string, number>
+  /** 最近头条留下的方向性热度（带宽符号的基点，逐帧衰减），派单用它判断 informed 客户做哪个方向 */
+  newsBias: Record<string, number>
+  /** 每帧的价格快照，回放用 */
+  history: PriceFrame[]
+}
+
+/** 回放用的一帧：时间和五个名字的最新价 */
+export interface PriceFrame {
+  tick: number
+  time: string
+  prices: Record<string, number>
 }
 
 export interface SessionMeta {
@@ -368,6 +412,8 @@ function normaliseOpeningBook(book: OpeningPosition[]): EnginePosition[] {
 export interface SessionOptions {
   /** 5 / 15 / 30 分钟档位，默认 30 */
   minutes?: SessionMinutes
+  /** 这一局的剧本，默认 classic（就是原来的 20 条新闻） */
+  scenario?: Scenario
 }
 
 export function createSession(
@@ -376,6 +422,10 @@ export function createSession(
   options: SessionOptions = {},
 ): SimulationState {
   const minutes = options.minutes ?? DEFAULT_MINUTES
+  const scenario = options.scenario ?? DEFAULT_SCENARIO
+  /* 场景可以把盘口拉宽、把深度抽干：崩盘日做市要难得多 */
+  const spreadMultiplier = scenario.spreadMultiplier ?? 1
+  const liquidityMultiplier = scenario.liquidityMultiplier ?? 1
   let rng = createSeed(seed)
   const instruments = UNIVERSE.map((entry) => {
     const prevClose = round2(entry.last / (1 + entry.changePct / 100))
@@ -389,7 +439,9 @@ export function createSession(
     }
     const scale = entry.last / raw[raw.length - 1]
     const series = raw.map((point) => round2(point * scale))
-    const [book, afterBook] = makeBook(rng, entry.last, entry.spreadBps, entry.lot)
+    const spreadBps = round2(entry.spreadBps * spreadMultiplier)
+    const lot = Math.max(10, Math.round(entry.lot * liquidityMultiplier))
+    const [book, afterBook] = makeBook(rng, entry.last, spreadBps, lot)
     rng = afterBook
     return {
       symbol: entry.symbol,
@@ -399,8 +451,8 @@ export function createSession(
       last: entry.last,
       lastMove: 0,
       sigma: entry.sigma,
-      spreadBps: entry.spreadBps,
-      lot: entry.lot,
+      spreadBps,
+      lot,
       series,
       book,
       bookMid: entry.last,
@@ -428,19 +480,22 @@ export function createSession(
     quotes: [],
     dispatch: [initialDispatch()],
     news: [],
-    pendingNews: NEWS_TEMPLATES.map((template) => ({
-      id: template.id,
-      time: formatShortTime(START_SECONDS + template.offset),
-      tag: template.tag,
-      kind: template.kind,
-      impact: template.impact,
-      headline: template.headline,
-      direction: template.direction,
-      at: START_SECONDS + template.offset,
-      short: template.short,
-      driftBps: template.driftBps,
-      symbol: template.symbol,
-    })),
+    pendingNews: scenario.news.map((item, index) => {
+      const at = START_SECONDS + item.at * SESSION_SECONDS
+      return {
+        id: scenario.id === 'classic' ? (NEWS_TEMPLATES[index]?.id ?? `N${index + 1}`) : `${scenario.id}-${index + 1}`,
+        time: formatShortTime(at),
+        tag: item.tag,
+        kind: item.kind,
+        impact: item.impact,
+        headline: item.headline,
+        direction: item.direction,
+        at,
+        short: item.short,
+        driftBps: item.driftBps,
+        symbol: item.symbol,
+      }
+    }),
     chartEvents: [],
     priceTape: [],
     commission: 0,
@@ -448,6 +503,17 @@ export function createSession(
     nextDispatchAt: START_SECONDS + 900,
     counters: { rfq: 201, quote: 118, order: 1043, trade: 8841 },
     telemetry: recordRfq(createTelemetry()),
+    scenario,
+    clients: DEFAULT_CLIENTS,
+    clientHeat: {},
+    newsBias: {},
+    history: [
+      {
+        tick: 0,
+        time: formatShortTime(START_SECONDS),
+        prices: Object.fromEntries(instruments.map((instrument) => [instrument.symbol, instrument.last])),
+      },
+    ],
   }
 }
 
@@ -482,6 +548,27 @@ function bookMid(book: Book): number {
 
 function bookOf(instruments: InstrumentState[], symbol: string): Book {
   return instruments.find((item) => item.symbol === symbol)?.book ?? { bids: [], asks: [] }
+}
+
+/**
+ * 盘口里排在我们前面的股数：客户卖出（我们接货）时看买盘里同价或更好的挂单，
+ * 客户买入（我们卖出）时看卖盘里同价或更好的挂单。
+ */
+function queueAheadAt(book: Book, clientSide: Side, price: number): number {
+  const levels = clientSide === 'SELL' ? book.bids : book.asks
+  return levels
+    .filter((level) => (clientSide === 'SELL' ? level.price >= price : level.price <= price))
+    .reduce((total, level) => total + level.size, 0)
+}
+
+/** 我们的报价相对盘口第一档有多有竞争力：1 = 排在最前，越小越靠后 */
+function priceCompetitiveness(book: Book, clientSide: Side, price: number): number {
+  const best = clientSide === 'SELL' ? book.bids[0]?.price : book.asks[0]?.price
+  if (!best) return 0
+  const distanceBps =
+    clientSide === 'SELL' ? ((best - price) / best) * 10000 : ((price - best) / best) * 10000
+  if (distanceBps <= 0) return 1
+  return Math.max(0.05, 0.8 - distanceBps / 8)
 }
 
 /** 盘口某一侧的总挂单量 —— 也就是「交易所现在最多能成交多少股」 */
@@ -578,6 +665,29 @@ function pickFlowEvent(roll: number) {
   return FLOW_EVENTS[FLOW_EVENTS.length - 1]
 }
 
+/** 头条热度的半衰期约 34 帧（≈28 个模拟分钟），让 informed 客户跟着同一条消息来做方向 */
+const NEWS_BIAS_DECAY = 0.98
+
+function decayNewsBias(bias: Record<string, number>): Record<string, number> {
+  const next: Record<string, number> = {}
+  for (const [symbol, value] of Object.entries(bias)) {
+    const decayed = round2(value * NEWS_BIAS_DECAY)
+    if (Math.abs(decayed) >= 0.5) next[symbol] = decayed
+  }
+  return next
+}
+
+/** 按权重抽一个名字（派单时让热度高的标的更容易被 informed 客户选中） */
+function pickWeighted(roll: number, entries: Array<[string, number]>): string {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0)
+  let target = roll * total
+  for (const [symbol, weight] of entries) {
+    target -= weight
+    if (target <= 0) return symbol
+  }
+  return entries[entries.length - 1][0]
+}
+
 /* ------------------------------------------------------------------ */
 /* 推进                                                                */
 /* ------------------------------------------------------------------ */
@@ -601,6 +711,7 @@ export function stepSession(state: SimulationState): SimulationState {
     impact: item.impact,
     headline: item.headline,
     direction: item.direction,
+    symbol: item.symbol,
   }))
   const news = revealed.length === 0 ? state.news : [...state.news, ...revealed]
   for (const item of revealed) {
@@ -630,6 +741,21 @@ export function stepSession(state: SimulationState): SimulationState {
         source: 'headline',
       }
       impulsesBySymbol.set(symbol, [...(impulsesBySymbol.get(symbol) ?? []), impulse])
+    }
+  }
+
+  /* 1c. 更新新闻热度：给刚出的头条记一笔带方向的偏移，派单用它找「消息灵通」的客户 */
+  let newsBias = decayNewsBias(state.newsBias)
+  for (const item of due) {
+    if (!item.direction || !item.driftBps) continue
+    const targets = item.symbol ? [item.symbol] : SYMBOLS
+    for (const symbol of targets) {
+      const instrument = state.instruments.find((candidate) => candidate.symbol === symbol)
+      if (!instrument) continue
+      newsBias = {
+        ...newsBias,
+        [symbol]: round2((newsBias[symbol] ?? 0) + item.direction * item.driftBps * volScale(instrument.sigma)),
+      }
     }
   }
 
@@ -736,7 +862,7 @@ export function stepSession(state: SimulationState): SimulationState {
     : state.instruments.map((instrument) =>
         instrument.lastMove === 0 ? instrument : { ...instrument, lastMove: 0 },
       )
-  /* 3. 报价存活、成交与过期 */
+  /* 3. 报价生命周期：延迟 → 挂上排队 → 部分成交 → 全成/过期 */
   let positions = state.positions
   let trades = state.trades
   let orders = state.orders
@@ -744,126 +870,200 @@ export function stepSession(state: SimulationState): SimulationState {
   let cash = state.cash
   let counters = state.counters
   let dispatch = state.dispatch
+  let clientHeat = { ...state.clientHeat }
   const quotes: LiveQuote[] = []
 
   for (const quote of state.quotes) {
-    if (quote.status !== 'LIVE') {
+    if (quote.status === 'FILLED' || quote.status === 'EXPIRED' || quote.status === 'PARTIAL') {
       quotes.push(quote)
       continue
     }
-    const ttlTicks = quote.ttlTicks - 1
-    const fillInTicks = quote.fillInTicks - 1
-
-    if (ttlTicks <= 0) {
-      quotes.push({ ...quote, status: 'EXPIRED', ttlTicks: 0, fillInTicks: 0 })
-      continue
-    }
-
-    if (fillInTicks > 0) {
-      quotes.push({ ...quote, ttlTicks, fillInTicks })
-      continue
-    }
-
-    const [roll, afterRoll] = nextRandom(rng)
-    rng = afterRoll
-    /* 报价宽度决定被接受的概率：报得越宽越难成交（逆向选择） */
-    if (roll >= quote.fillProbability) {
-      quotes.push({ ...quote, status: 'EXPIRED', ttlTicks, fillInTicks: 0 })
-      continue
-    }
-
     const ourSide: Side = quote.clientSide === 'SELL' ? 'BUY' : 'SELL'
-    const price = quote.clientSide === 'SELL' ? quote.bid : quote.offer
-    const gross = price * quote.qty
-    const fee = round2(gross * COMMISSION_RATE)
-    /* 资金约束：买入必须有足够现金，否则这张报价自然作废 */
-    if (ourSide === 'BUY' && gross + fee > cash) {
-      quotes.push({ ...quote, status: 'EXPIRED', ttlTicks, fillInTicks: 0 })
+    const ourPrice = quote.clientSide === 'SELL' ? quote.bid : quote.offer
+
+    /* 3a. 报价还在路上：延迟结束前不挂进盘口 */
+    if (quote.status === 'PENDING') {
+      const latencyTicks = quote.latencyTicks - 1
+      if (latencyTicks > 0) {
+        quotes.push({ ...quote, latencyTicks })
+        continue
+      }
+      const queueAhead = queueAheadAt(bookOf(instruments, quote.symbol), quote.clientSide, ourPrice)
+      quotes.push({ ...quote, status: 'LIVE', latencyTicks: 0, queueAhead })
       continue
     }
-    cash = round2(cash + (ourSide === 'BUY' ? -(gross + fee) : gross - fee))
-    positions = applyPositionFill(positions, quote.symbol, ourSide, quote.qty, price)
-    /* 我们自己的成交推动价格：买上推、卖下压，幅度按成交金额（3–10bps），之后逐帧衰减 */
-    instruments = applyFillImpact(instruments, quote.symbol, ourSide, gross, tick)
-    commission = round2(commission + fee)
-    counters = {
-      ...counters,
-      trade: counters.trade + 1,
-      order: counters.order + 1,
+
+    /* 3b. 挂在盘口上的每一帧：有效期倒计时、排队消耗、主动成交可能打到我们 */
+    const ttlTicks = quote.ttlTicks - 1
+    if (ttlTicks <= 0) {
+      const finalStatus = quote.filledQty > 0 ? 'PARTIAL' : 'EXPIRED'
+      if (quote.rfqId) dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
+      telemetry = patchQuote(telemetry, quote.id, { filledQty: quote.filledQty, queueTicks: quote.queueTicks })
+      quotes.push({ ...quote, status: finalStatus, ttlTicks: 0 })
+      continue
     }
-    const filledTrade: TradeRow = {
-      id: `TRD-${counters.trade}`,
-      time: formatShortTime(simSeconds),
-      symbol: quote.symbol,
-      side: ourSide,
-      qty: quote.qty,
-      price,
-      fee,
-      venue: 'client',
+
+    const lot = instruments.find((item) => item.symbol === quote.symbol)?.lot ?? 100
+    const [volRoll, afterVol] = nextRandom(rng)
+    rng = afterVol
+    const marketVolume = Math.round(lot * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN)))
+    const queueBefore = quote.queueAhead
+    const queueAhead = Math.max(0, queueBefore - marketVolume)
+    /* 排在队首之后的帧数：清空队列的那一帧定格，用来衡量「报价被晾了多久」 */
+    const queueTicks = queueBefore === 0 ? quote.queueTicks : queueAhead === 0 ? quote.queueTicks : quote.queueTicks + 1
+    let next: LiveQuote = { ...quote, ttlTicks, queueAhead, queueTicks }
+    if (queueBefore > 0 && queueAhead === 0) {
+      telemetry = patchQuote(telemetry, quote.id, { queueTicks })
     }
-    const filledOrder: OrderRow = {
-      id: `ORD-${counters.order}`,
-      time: formatShortTime(simSeconds),
-      symbol: quote.symbol,
-      side: ourSide,
-      qty: quote.qty,
-      price,
-      status: 'FILLED',
-      venue: 'client',
+
+    /* 队列前面的量被吃掉后，剩下的主动成交才可能打到我们 */
+    const available = Math.max(0, marketVolume - queueBefore)
+    const remaining = quote.qty - quote.filledQty
+    if (available > 0 && remaining > 0) {
+      const [roll, afterRoll] = nextRandom(rng)
+      rng = afterRoll
+      const chance = clampUnit(
+        priceCompetitiveness(bookOf(instruments, quote.symbol), quote.clientSide, ourPrice) *
+          (0.5 + 0.5 * quote.fillProbability) *
+          quote.tolerance,
+      )
+      if (roll < chance) {
+        const fillQty = Math.min(remaining, available)
+        const gross = ourPrice * fillQty
+        const fee = round2(gross * COMMISSION_RATE)
+        /* 资金约束：买入必须付得起，付不起这张报价就作废 */
+        if (ourSide === 'BUY' && gross + fee > cash) {
+          if (quote.rfqId) dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
+          quotes.push({ ...next, status: 'EXPIRED', ttlTicks: 0 })
+          continue
+        }
+        cash = round2(cash + (ourSide === 'BUY' ? -(gross + fee) : gross - fee))
+        positions = applyPositionFill(positions, quote.symbol, ourSide, fillQty, ourPrice)
+        /* 我们自己的成交推动价格：买上推、卖下压，幅度按成交金额（3–10bps），之后逐帧衰减 */
+        instruments = applyFillImpact(instruments, quote.symbol, ourSide, gross, tick)
+        commission = round2(commission + fee)
+        counters = { ...counters, trade: counters.trade + 1, order: counters.order + 1 }
+        const filledTrade: TradeRow = {
+          id: `TRD-${counters.trade}`,
+          time: formatShortTime(simSeconds),
+          symbol: quote.symbol,
+          side: ourSide,
+          qty: fillQty,
+          price: round2(ourPrice),
+          fee,
+          venue: 'client',
+        }
+        const filledOrder: OrderRow = {
+          id: `ORD-${counters.order}`,
+          time: formatShortTime(simSeconds),
+          symbol: quote.symbol,
+          side: ourSide,
+          qty: fillQty,
+          price: round2(ourPrice),
+          status: 'FILLED',
+          venue: 'client',
+        }
+        trades = [filledTrade, ...trades].slice(0, 20)
+        orders = [filledOrder, ...orders].slice(0, 20)
+        const fillMid = bookMid(bookOf(instruments, quote.symbol))
+        telemetry = recordFill(telemetry, {
+          id: filledTrade.id,
+          symbol: quote.symbol,
+          side: ourSide,
+          qty: fillQty,
+          price: round2(ourPrice),
+          mid: fillMid,
+          edge: round2(ourSide === 'BUY' ? fillMid - ourPrice : ourPrice - fillMid),
+          notional: round2(gross),
+          fee,
+          tick,
+          venue: 'client',
+          clientType: quote.clientType,
+          quoteId: quote.id,
+        })
+        const filledQty = quote.filledQty + fillQty
+        telemetry = patchQuote(telemetry, quote.id, { filledQty })
+        /* 好的服务会抵消一点客户怨气 */
+        clientHeat = { ...clientHeat, [quote.client]: Math.max(0, round2((clientHeat[quote.client] ?? 0) - 0.5)) }
+        const stillLive = filledQty < quote.qty
+        next = { ...next, filledQty, status: stillLive ? 'LIVE' : 'FILLED' }
+        if (!stillLive && quote.rfqId) {
+          dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
+        }
+      }
     }
-    trades = [filledTrade, ...trades].slice(0, 20)
-    orders = [filledOrder, ...orders].slice(0, 20)
-    const fillMid = bookMid(bookOf(instruments, quote.symbol))
-    telemetry = recordFill(telemetry, {
-      id: filledTrade.id,
-      symbol: quote.symbol,
-      side: ourSide,
-      qty: quote.qty,
-      price,
-      mid: fillMid,
-      edge: round2(ourSide === 'BUY' ? fillMid - price : price - fillMid),
-      notional: round2(gross),
-      fee,
-      tick,
-      venue: 'client',
-    })
-    if (quote.rfqId) {
-      dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
-    }
-    quotes.push({ ...quote, status: 'FILLED', ttlTicks, fillInTicks: 0 })
+    quotes.push(next)
   }
 
-  /* 4. 系统派单：过期清理 + 新单到达 */
-  dispatch = dispatch.filter((item) => simSeconds - item.createdAt < DISPATCH_TTL)
+  /* 4. 系统派单：过期清理 + 新单到达；头条刚出时消息灵通的客户会扎堆来做方向 */
+  dispatch = dispatch.filter((item) => {
+    const profile = state.clients.find((candidate) => candidate.id === item.client)
+    const ttl = DISPATCH_TTL * ((profile?.patience ?? PATIENCE_BASE) / PATIENCE_BASE)
+    return simSeconds - item.createdAt < ttl
+  })
   let nextDispatchAt = state.nextDispatchAt
+  /* 客户怨气每次派单衰减 15%：服务好一点，客户会回来 */
+  clientHeat = Object.fromEntries(
+    Object.entries(clientHeat).map(([id, heat]) => [id, round2(heat * 0.85)]),
+  )
   if (simSeconds >= nextDispatchAt && dispatch.length < MAX_DISPATCH) {
-    const [symbol, afterSymbol] = pickOne(rng, SYMBOLS)
-    rng = afterSymbol
-    const [client, afterClient] = pickOne(rng, CLIENTS)
-    rng = afterClient
-    const [sideRoll, afterSide] = nextRandom(rng)
-    rng = afterSide
-    const [note, afterNote] = pickOne(rng, DISPATCH_NOTES)
-    rng = afterNote
-    const [units, afterUnits] = randomInt(rng, 1, 4)
+    const hot = Object.entries(newsBias).filter(([, value]) => Math.abs(value) >= 8)
+    const [typeRoll, afterType] = nextRandom(rng)
+    rng = afterType
+    const informed = hot.length > 0 && typeRoll < INFORMED_SHARE
+    let symbol: string
+    let clientSide: Side
+    if (informed) {
+      /* 消息灵通的客户挑最热的名字、顺着新闻方向做 */
+      const [symbolRoll, afterSymbolRoll] = nextRandom(rng)
+      rng = afterSymbolRoll
+      symbol = pickWeighted(symbolRoll, hot.map(([name, value]) => [name, Math.abs(value)] as [string, number]))
+      clientSide = (newsBias[symbol] ?? 0) >= 0 ? 'BUY' : 'SELL'
+    } else {
+      const [symbolPick, afterSymbolPick] = pickOne(rng, SYMBOLS)
+      rng = afterSymbolPick
+      symbol = symbolPick
+      const [sideRoll, afterSideRoll] = nextRandom(rng)
+      rng = afterSideRoll
+      clientSide = sideRoll < 0.5 ? 'SELL' : 'BUY'
+    }
+    const roster = state.clients.filter((candidate) => candidate.type === (informed ? 'informed' : 'uninformed'))
+    const pool = roster.length > 0 ? roster : state.clients
+    /* 客户记忆：上次被报得离谱或拒过单的客户，这一轮更不容易再上门 */
+    const [clientRoll, afterClientRoll] = nextRandom(rng)
+    rng = afterClientRoll
+    const clientId = pickWeighted(
+      clientRoll,
+      pool.map((profile) => [profile.id, 1 / (1 + (clientHeat[profile.id] ?? 0))] as [string, number]),
+    )
+    const profile = state.clients.find((candidate) => candidate.id === clientId) ?? pool[0]
+    const [units, afterUnits] = randomInt(rng, informed ? 3 : 1, informed ? 5 : 4)
     rng = afterUnits
+    const [noteRoll, afterNote] = nextRandom(rng)
+    rng = afterNote
+    const note =
+      DISPATCH_NOTES[Math.min(DISPATCH_NOTES.length - 1, Math.floor(noteRoll * DISPATCH_NOTES.length))]
     const rfqCounter = counters.rfq + 1
     counters = { ...counters, rfq: rfqCounter }
-    telemetry = recordRfq(telemetry)
+    telemetry = recordRfq(telemetry, informed)
     dispatch = [
       ...dispatch,
       {
         id: `RFQ-${rfqCounter}`,
         time: formatShortTime(simSeconds),
-        client,
-        side: sideRoll < 0.5 ? 'SELL' : 'BUY',
+        client: profile.id,
+        side: clientSide,
         symbol,
         qty: units * 500,
-        note,
+        note: informed ? profile.note : note,
         createdAt: simSeconds,
       },
     ]
-    nextDispatchAt = simSeconds + DISPATCH_INTERVAL
+    nextDispatchAt =
+      simSeconds +
+      (informed
+        ? INFORMED_INTERVAL_MIN + Math.round(typeRoll * (INFORMED_INTERVAL_MAX - INFORMED_INTERVAL_MIN))
+        : DISPATCH_INTERVAL)
   }
 
   /* 5. 遥测采样：每帧记一次敞口与 P&L，维护峰值/最大回撤 */
@@ -872,6 +1072,19 @@ export function stepSession(state: SimulationState): SimulationState {
 
   /* 6. 会话结束 */
   const status: SessionStatus = simSeconds - state.startedAt >= SESSION_SECONDS ? 'CLOSED' : 'RUNNING'
+
+  /* 7. 回放帧：每帧记录五个名字的价格，供结算后的复盘时间轴使用 */
+  const history: PriceFrame[] =
+    tick % PRICE_UPDATE_TICKS === 0
+      ? [
+          ...state.history,
+          {
+            tick,
+            time: formatShortTime(simSeconds),
+            prices: Object.fromEntries(instruments.map((item) => [item.symbol, item.last])),
+          },
+        ].slice(-HISTORY_LIMIT)
+      : state.history
 
   return {
     ...state,
@@ -895,6 +1108,9 @@ export function stepSession(state: SimulationState): SimulationState {
     nextDispatchAt,
     counters,
     telemetry,
+    newsBias,
+    clientHeat,
+    history,
   }
 }
 
@@ -988,15 +1204,19 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
   }
   const counter = state.counters.quote + 1
   let rng = state.rng
-  const [fillDelay, afterFill] = randomInt(rng, 1, 3)
-  rng = afterFill
-  /** "Valid for" 用模拟秒表示；按 tick 折算，最少 3 个 tick，保证能看到 LIVE 报价 */
-  const ttlTicks = Math.min(24, Math.max(3, Math.round(input.validFor / 12)))
+  /* 报价不是点一下就到位：先在路上待 1–3 个 tick，能被抢跑 */
+  const [latencyTicks, afterLatency] = randomInt(rng, 1, 3)
+  rng = afterLatency
+  /** "Valid for" 用模拟秒表示；按 tick 折算，最少 6 个 tick，保证能看到 LIVE 与排队 */
+  const ttlTicks = Math.min(40, Math.max(6, Math.round(input.validFor / 10)))
   const marketBook = state.instruments.find((item) => item.symbol === input.symbol)?.book
   const liveSpread = marketBook ? round2(marketBook.asks[0].price - marketBook.bids[0].price) : 0
   const ourSpread = round2(input.offer - input.bid)
   /** 报价宽度相对市场价差的倍数：决定被成交的概率，也进纪律评分 */
   const spreadRatio = liveSpread > 0 ? round2(ourSpread / liveSpread) : 1
+  const profile = rfq ? state.clients.find((candidate) => candidate.id === rfq.client) : undefined
+  const clientType: ClientType = profile?.type ?? 'uninformed'
+  const tolerance = profile?.tolerance ?? 1
   const quote: LiveQuote = {
     id: `Q-${counter}`,
     symbol: input.symbol,
@@ -1005,12 +1225,17 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     offer: round2(input.offer),
     offerVolume: input.offerVolume,
     validFor: input.validFor,
-    status: 'LIVE',
+    status: 'PENDING',
     client: rfq?.client ?? 'AM-39',
+    clientType,
+    tolerance,
     qty,
     clientSide,
     ttlTicks,
-    fillInTicks: fillDelay,
+    latencyTicks,
+    queueTicks: 0,
+    queueAhead: 0,
+    filledQty: 0,
     spreadRatio,
     fillProbability: fillProbability(spreadRatio),
     rfqId: rfq?.id,
@@ -1026,13 +1251,22 @@ export function sendQuote(state: SimulationState, input: QuoteInput): ActionResu
     marketSpread: liveSpread,
     responseTicks,
     rfqId: rfq?.id,
+    clientType,
+    queueTicks: 0,
+    filledQty: 0,
   })
+  /* 报得太离谱会得罪客户：怨气累积，下一次他更可能去找别家 */
+  const clientHeat =
+    spreadRatio > 2.2 && rfq
+      ? { ...state.clientHeat, [rfq.client]: Math.min(3, round2((state.clientHeat[rfq.client] ?? 0) + 1)) }
+      : state.clientHeat
 
   return {
     state: {
       ...state,
       rng,
       telemetry,
+      clientHeat,
       quotes: [...state.quotes, quote].slice(-MAX_QUOTES),
       counters: { ...state.counters, quote: counter },
     },
@@ -1221,9 +1455,15 @@ export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInpu
 export function declineDispatch(state: SimulationState, rfqId: string): ActionResult {
   const rfq = state.dispatch.find((item) => item.id === rfqId)
   if (!rfq) return { state, message: 'DISPATCH NOT FOUND' }
+  /* 拒单留下怨气：这位客户接下来更可能去找别家，派单权重下降 */
+  const clientHeat = {
+    ...state.clientHeat,
+    [rfq.client]: Math.min(3, round2((state.clientHeat[rfq.client] ?? 0) + 0.8)),
+  }
   return {
     state: {
       ...state,
+      clientHeat,
       dispatch: state.dispatch.filter((item) => item.id !== rfqId),
       telemetry: recordDecline(state.telemetry),
     },
@@ -1321,6 +1561,21 @@ export function selectChartMarkers(
 
 export function selectCash(state: SimulationState): number {
   return round2(state.cash)
+}
+
+/** 本局用的场景（名字、简介、新闻脚本），给入口页与结算报告展示 */
+export function selectScenario(state: SimulationState): Scenario {
+  return state.scenario
+}
+
+/** 回放帧：每帧五个名字的价格，供 ReplayDrawer 画时间轴与曲线 */
+export function selectHistory(state: SimulationState): PriceFrame[] {
+  return state.history
+}
+
+/** 客户画像与怨气值：客户流失越严重，派单越少、报价质量评分越差 */
+export function selectClientHeat(state: SimulationState): Record<string, number> {
+  return state.clientHeat
 }
 
 /** 最近的价格变动记录：只留下有明显来源或幅度够看的，给 PRICE TAPE 面板 */

@@ -92,7 +92,9 @@ export default function TradeTicket({
 
   const onDeclineClick = () => setFlash(onDecline())
 
-  const rows = quotes.filter((quote) => (tab === 'live' ? quote.status === 'LIVE' : quote.status !== 'LIVE'))
+  /* 在途（PENDING）也算活跃报价：客户能看到它正在路上，然后才挂进盘口 */
+  const isOpen = (status: string) => status === 'PENDING' || status === 'LIVE'
+  const rows = quotes.filter((quote) => (tab === 'live' ? isOpen(quote.status) : !isOpen(quote.status)))
 
   return (
     <section className="panel panel--ticket">
@@ -306,6 +308,21 @@ export default function TradeTicket({
                     <td className="num">{quote.validFor}s</td>
                     <td>
                       <span className={`badge badge--${quote.status.toLowerCase()}`}>{t(quote.status)}</span>
+                      {quote.status === 'PENDING' ? (
+                        <span className="quote-extra" title={t('Ticks left before the quote reaches the market')}>
+                          +{quote.latencyTicks}
+                        </span>
+                      ) : null}
+                      {quote.status === 'LIVE' && quote.queueAhead > 0 ? (
+                        <span className="quote-extra" title={t('Size ahead of you at this price')}>
+                          Q{quote.queueAhead.toLocaleString('en-US')}
+                        </span>
+                      ) : null}
+                      {quote.filledQty > 0 ? (
+                        <span className="quote-extra" title={t('Filled / quoted quantity')}>
+                          {quote.filledQty.toLocaleString('en-US')}/{quote.qty.toLocaleString('en-US')}
+                        </span>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

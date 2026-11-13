@@ -1,4 +1,5 @@
 import type { Side, Venue } from '../types'
+import type { ClientType } from './scenarios'
 
 /**
  * 决策遥测：把玩家在台面上做过的事情记成事件流，供评分和结算报告使用。
@@ -22,6 +23,12 @@ export interface QuoteRecord {
   /** 距离这条 RFQ 到达过了多少个 tick（null = 手工报价，不是回应派单） */
   responseTicks: number | null
   rfqId?: string
+  /** 这条报价背后是消息灵通的客户还是普通流动性客户 */
+  clientType: ClientType
+  /** 报价从发出到排到队首用了多少个 tick（PENDING + 排队消耗） */
+  queueTicks: number
+  /** 最终成交了多少股（部分成交时小于报价数量） */
+  filledQty: number
 }
 
 export interface FillRecord {
@@ -40,6 +47,10 @@ export interface FillRecord {
   tick: number
   /** 成交来源：客户流 or 自己在交易所吃单 */
   venue: Venue
+  /** 客户流成交时，背后客户的类型（交易所成交为空） */
+  clientType?: ClientType
+  /** 客户流成交时来自哪张报价 */
+  quoteId?: string
 }
 
 export interface ExposureSample {
@@ -64,6 +75,10 @@ export interface Telemetry {
   peakPnl: number
   maxDrawdown: number
   news: NewsReaction[]
+  /** 消息灵通的客户一共发来多少张 RFQ */
+  informedRfqs: number
+  /** 其中被我们吃下（成交）多少张 */
+  informedFills: number
 }
 
 /** 事件流上限，避免长局无限增长 */
@@ -84,6 +99,8 @@ export function createTelemetry(): Telemetry {
     peakPnl: 0,
     maxDrawdown: 0,
     news: [],
+    informedRfqs: 0,
+    informedFills: 0,
   }
 }
 
@@ -91,12 +108,28 @@ export function recordQuote(telemetry: Telemetry, quote: QuoteRecord): Telemetry
   return { ...telemetry, quotes: [...telemetry.quotes, quote].slice(-QUOTE_LIMIT) }
 }
 
+/** 报价发出后才有结果（排队多久、最终成交多少），用这个补写到对应的记录上 */
+export function patchQuote(
+  telemetry: Telemetry,
+  id: string,
+  patch: Partial<Pick<QuoteRecord, 'queueTicks' | 'filledQty'>>,
+): Telemetry {
+  return {
+    ...telemetry,
+    quotes: telemetry.quotes.map((quote) => (quote.id === id ? { ...quote, ...patch } : quote)),
+  }
+}
+
 export function recordDecline(telemetry: Telemetry): Telemetry {
   return { ...telemetry, declines: telemetry.declines + 1 }
 }
 
-export function recordRfq(telemetry: Telemetry): Telemetry {
-  return { ...telemetry, rfqs: telemetry.rfqs + 1 }
+export function recordRfq(telemetry: Telemetry, informed = false): Telemetry {
+  return {
+    ...telemetry,
+    rfqs: telemetry.rfqs + 1,
+    informedRfqs: telemetry.informedRfqs + (informed ? 1 : 0),
+  }
 }
 
 /** 记一笔成交，并把最近一条「还没被响应」的头条标记成已响应 */
@@ -104,7 +137,9 @@ export function recordFill(telemetry: Telemetry, fill: FillRecord): Telemetry {
   const news = telemetry.news.map((item) =>
     !item.traded && fill.tick - item.tick <= NEWS_REACTION_TICKS ? { ...item, traded: true } : item,
   )
-  return { ...telemetry, fills: [...telemetry.fills, fill].slice(-FILL_LIMIT), news }
+  const informedFills =
+    fill.clientType === 'informed' ? telemetry.informedFills + 1 : telemetry.informedFills
+  return { ...telemetry, fills: [...telemetry.fills, fill].slice(-FILL_LIMIT), news, informedFills }
 }
 
 export function recordNews(telemetry: Telemetry, id: string, tick: number): Telemetry {

@@ -1,5 +1,6 @@
 import type { ScoreCard, ScoreDimension } from '../types'
-import { STARTING_CASH, selectPnl, type SimulationState } from './simulation'
+import { NEWS_REACTION_TICKS } from './telemetry'
+import { STARTING_CASH, selectPnl, type PriceFrame, type SimulationState } from './simulation'
 
 /**
  * 评分：把遥测事件折算成 0–100 的六个维度 + 一个加权综合分。
@@ -240,5 +241,134 @@ export function adviceFor(key: AdviceKey): string {
       return 'trade within {ticks} ticks of a headline instead of waiting it out.'
     default:
       return 'keep the same process and repeat it.'
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 决策审阅：结算后回看「哪几笔被逆向选择」和「哪条消息没接住」        */
+/* ------------------------------------------------------------------ */
+
+export interface ReviewFill {
+  id: string
+  time: string
+  tick: number
+  symbol: string
+  side: 'BUY' | 'SELL'
+  qty: number
+  price: number
+  /** 成交后窗口内价格朝不利于我们的方向走了多少 bps（正数 = 逆向选择） */
+  adverseBps: number
+}
+
+export interface ReviewMissed {
+  id: string
+  time: string
+  tick: number
+  symbol: string | null
+  /** 消息出来后窗口内该标的的涨跌（bps，带方向） */
+  moveBps: number
+}
+
+export interface ReviewDrawdown {
+  tick: number
+  time: string
+  /** 从峰值回撤的美元数（正数） */
+  dollars: number
+}
+
+export interface DecisionReview {
+  /** 审阅窗口：成交后/消息后看多少 tick 的价格变化 */
+  windowTicks: number
+  /** 被逆向选择的客户流成交，最严重的三笔 */
+  adverse: ReviewFill[]
+  /** 出了消息却没动手的机会，按错过的幅度排序 */
+  missed: ReviewMissed[]
+  /** 峰值到谷底最大回撤发生的那一刻 */
+  worstDrawdown: ReviewDrawdown | null
+  /** 消息灵通的客户来了多少张、我们接下了多少张 */
+  informed: { rfqs: number; fills: number }
+}
+
+function priceAt(history: PriceFrame[], tick: number, symbol: string): number | null {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index].tick <= tick) return history[index].prices[symbol] ?? null
+  }
+  return null
+}
+
+function timeAt(history: PriceFrame[], tick: number): string {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index].tick <= tick) return history[index].time
+  }
+  return '--:--'
+}
+
+export function decisionReview(state: SimulationState): DecisionReview {
+  const windowTicks = NEWS_REACTION_TICKS
+  const history = state.history
+  const telemetry = state.telemetry
+
+  /* 1. 逆向选择：客户流成交之后，价格是否马上朝我们不利的方向走 */
+  const adverse: ReviewFill[] = telemetry.fills
+    .filter((fill) => fill.venue === 'client')
+    .map((fill) => {
+      const start = priceAt(history, fill.tick, fill.symbol)
+      const later = priceAt(history, fill.tick + windowTicks, fill.symbol)
+      if (start === null || later === null || start === 0) return null
+      const moveBps = ((later - start) / start) * 10_000
+      const adverseBps = fill.side === 'BUY' ? -moveBps : moveBps
+      return {
+        id: fill.id,
+        time: timeAt(history, fill.tick),
+        tick: fill.tick,
+        symbol: fill.symbol,
+        side: fill.side,
+        qty: fill.qty,
+        price: fill.price,
+        adverseBps: Math.round(adverseBps * 10) / 10,
+      } satisfies ReviewFill
+    })
+    .filter((fill): fill is ReviewFill => fill !== null && fill.adverseBps > 1)
+    .sort((a, b) => b.adverseBps - a.adverseBps)
+    .slice(0, 3)
+
+  /* 2. 错过的消息：头条出来后我们没在同一方向动手，事后价格走了多远 */
+  const missed: ReviewMissed[] = telemetry.news
+    .filter((reaction) => !reaction.traded)
+    .map((reaction): ReviewMissed | null => {
+      const item = state.news.find((candidate) => candidate.id === reaction.id)
+      if (!item || !item.symbol) return null
+      const start = priceAt(history, reaction.tick, item.symbol)
+      const later = priceAt(history, reaction.tick + windowTicks, item.symbol)
+      if (start === null || later === null || start === 0) return null
+      return {
+        id: item.id,
+        time: timeAt(history, reaction.tick),
+        tick: reaction.tick,
+        symbol: item.symbol,
+        moveBps: Math.round(((later - start) / start) * 10_000 * 10) / 10,
+      } satisfies ReviewMissed
+    })
+    .filter((item): item is ReviewMissed => item !== null)
+    .sort((a, b) => Math.abs(b.moveBps) - Math.abs(a.moveBps))
+    .slice(0, 3)
+
+  /* 3. 最大回撤发生在哪一刻：P&L 从峰值往下掉得最深的那一帧 */
+  let peak = Number.NEGATIVE_INFINITY
+  let worstDrawdown: ReviewDrawdown | null = null
+  for (const sample of telemetry.exposure) {
+    peak = Math.max(peak, sample.pnl)
+    const dollars = peak - sample.pnl
+    if (dollars > (worstDrawdown?.dollars ?? 0)) {
+      worstDrawdown = { tick: sample.tick, time: timeAt(history, sample.tick), dollars: Math.round(dollars) }
+    }
+  }
+
+  return {
+    windowTicks,
+    adverse,
+    missed,
+    worstDrawdown,
+    informed: { rfqs: telemetry.informedRfqs, fills: telemetry.informedFills },
   }
 }

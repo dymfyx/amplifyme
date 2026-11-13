@@ -8,10 +8,12 @@ import {
   selectCash,
   selectChartMarkers,
   selectDrivers,
+  selectHistory,
   selectInstruments,
   selectPnl,
   selectPositions,
   selectPriceTape,
+  selectScenario,
   selectSeries,
   selectSessionMeta,
   type ExchangeTradeInput,
@@ -20,7 +22,14 @@ import {
   type QuoteInput,
   type SessionMinutes,
 } from '../engine/simulation'
-import { adviceFor, coachingSummary, scoreSession, selectSettlement } from '../engine/scoring'
+import type { Scenario } from '../engine/scenarios'
+import {
+  adviceFor,
+  coachingSummary,
+  decisionReview,
+  scoreSession,
+  selectSettlement,
+} from '../engine/scoring'
 import { NEWS_REACTION_TICKS } from '../engine/telemetry'
 import { useT } from '../i18n'
 import { useSimulation } from '../hooks/useSimulation'
@@ -33,6 +42,10 @@ import MarketWatch from '../components/MarketWatch'
 import PriceTape from '../components/PriceTape'
 import PositionsPanel from '../components/PositionsPanel'
 import ScoreDrawer from '../components/ScoreDrawer'
+import ReplayDrawer, {
+  type ReplayDecision,
+  type ReplayEvent,
+} from '../components/ReplayDrawer'
 import SettlementReport from '../components/SettlementReport'
 import StatusBar from '../components/StatusBar'
 import TopBar from '../components/TopBar'
@@ -45,6 +58,8 @@ interface TerminalProps {
   seed?: number | null
   /** 练习时长档位：5 / 15 / 30 分钟 */
   minutes?: SessionMinutes
+  /** 本局的情景剧本：新闻时间轴、价差/流动性系数都由它决定 */
+  scenario: Scenario
   onExit: () => void
 }
 
@@ -53,16 +68,18 @@ export default function Terminal({
   openingBook,
   seed = null,
   minutes = DEFAULT_MINUTES,
+  scenario,
   onExit,
 }: TerminalProps) {
   const t = useT()
-  const [initial] = useState(() => createSession(seed ?? undefined, openingBook, { minutes }))
-  const simulation = useSimulation(initial, openingBook, seed, minutes)
+  const [initial] = useState(() => createSession(seed ?? undefined, openingBook, { minutes, scenario }))
+  const simulation = useSimulation(initial, openingBook, seed, minutes, scenario)
   const { state } = simulation
 
   const [selected, setSelected] = useState('AZN')
   const [activeRfqId, setActiveRfqId] = useState<string | null>('RFQ-201')
   const [scoreOpen, setScoreOpen] = useState(false)
+  const [replayOpen, setReplayOpen] = useState(false)
   const [reportDismissed, setReportDismissed] = useState(false)
 
   const instruments = selectInstruments(state)
@@ -87,6 +104,47 @@ export default function Terminal({
     advice: t(adviceFor(coaching.adviceKey), { ticks: NEWS_REACTION_TICKS }),
   })
   const closed = state.status === 'CLOSED'
+  const review = decisionReview(state)
+  const scenarioMeta = selectScenario(state)
+  const history = selectHistory(state)
+
+  /* 回放：价格帧直接用引擎历史；决策与事件从遥测里还原成时间轴上的点 */
+  const timeAtTick = new Map(history.map((frame) => [frame.tick, frame.time]))
+  const replayEvents: ReplayEvent[] = state.news.map((item) => {
+    const reaction = state.telemetry.news.find((candidate) => candidate.id === item.id)
+    return {
+      id: item.id,
+      tick: reaction?.tick ?? 0,
+      time: item.time,
+      label: item.headline,
+      direction: item.direction,
+    }
+  })
+  const replayDecisions: ReplayDecision[] = [
+    ...state.telemetry.quotes.map<ReplayDecision>((quote) => ({
+      id: quote.id,
+      tick: quote.tick,
+      time: timeAtTick.get(quote.tick) ?? '--:--',
+      kind: 'quote',
+      label: `${quote.symbol} ${quote.ourSpread.toFixed(2)} wide`,
+      detail: t('{ratio}x market spread · {filled} filled', {
+        ratio: quote.marketSpread > 0 ? (quote.ourSpread / quote.marketSpread).toFixed(1) : '—',
+        filled: quote.filledQty,
+      }),
+      tone: quote.filledQty > 0 ? 'up' : undefined,
+    })),
+    ...state.telemetry.fills.map<ReplayDecision>((fill) => ({
+      id: fill.id,
+      tick: fill.tick,
+      time: timeAtTick.get(fill.tick) ?? '--:--',
+      kind: 'fill',
+      label: `${fill.side} ${fill.qty.toLocaleString('en-US')} ${fill.symbol} @ ${fill.price.toFixed(2)}`,
+      detail: t(fill.venue === 'client' ? 'Client flow · edge {edge}' : 'Exchange · edge {edge}', {
+        edge: fill.edge.toFixed(1),
+      }),
+      tone: fill.edge >= 0 ? 'up' : 'down',
+    })),
+  ].sort((a, b) => a.tick - b.tick)
 
   const selectRfq = (id: string) => {
     setActiveRfqId(id)
@@ -136,10 +194,12 @@ export default function Terminal({
         cash={cash}
         budget={STARTING_CASH}
         scoreOpen={scoreOpen}
+        replayOpen={replayOpen}
         sharedSeed={seed}
         minutes={meta.minutes}
         timeLeftMs={meta.timeLeftMs}
         onOpenScore={() => setScoreOpen(true)}
+        onOpenReplay={() => setReplayOpen(true)}
         onRestart={handleRestart}
         onExit={onExit}
       />
@@ -207,12 +267,29 @@ export default function Terminal({
       <StatusBar meta={meta} onTogglePause={simulation.togglePause} onCycleSpeed={simulation.cycleSpeed} />
 
       {scoreOpen ? <ScoreDrawer score={score} onClose={() => setScoreOpen(false)} /> : null}
+      {replayOpen ? (
+        <ReplayDrawer
+          frames={history.map((frame) => ({ tick: frame.tick, time: frame.time, prices: frame.prices }))}
+          decisions={replayDecisions}
+          events={replayEvents}
+          symbols={instruments.map((item) => item.symbol)}
+          session={{
+            desk: t(role === 'sales' ? 'SALES DESK' : 'MARKET MAKING DESK'),
+            seed: state.seed,
+            minutes: meta.minutes,
+            scenario: t(scenarioMeta.name),
+          }}
+          onClose={() => setReplayOpen(false)}
+        />
+      ) : null}
       {closed && !reportDismissed ? (
         <SettlementReport
           desk={t(role === 'sales' ? 'SALES DESK' : 'MARKET MAKING DESK')}
           stats={settlement}
           score={score}
           coaching={coachingText}
+          review={review}
+          scenarioName={t(scenarioMeta.name)}
           onRestart={handleRestart}
           onClose={() => setReportDismissed(true)}
         />

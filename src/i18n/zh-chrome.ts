@@ -155,4 +155,30 @@ export const zhChrome: Record<string, string> = {
   'carry less gross risk into headlines.': '别带着过大的总敞口去面对消息。',
   'trade within {ticks} ticks of a headline instead of waiting it out.': '消息后 {ticks} 跳内就动手，而不是干等。',
   'keep the same process and repeat it.': '保持同样的流程，重复执行。',
+
+  // 回放与决策审阅（P2.10）
+  REPLAY: '回放',
+  'Replay this session frame by frame': '逐帧回放本局',
+  'DECISION REVIEW': '决策审阅',
+  'PICKED OFF': '成交即被套',
+  'No client fill was immediately run over.': '没有客户成交后立刻被行情打穿。',
+  'MISSED HEADLINES': '错过的头条',
+  'You traded into every single-name headline.': '每个个股头条你都参与了。',
+  'WORST DRAWDOWN': '最大回撤',
+  'That is the point where discipline matters most.': '这正是最考验纪律的时刻。',
+  'No drawdown inside the session.': '本局没有出现回撤。',
+  'INFORMED FLOW': '消息灵通客户',
+  'Clients traded on a headline': '跟着头条成交的客户',
+  'These are the calls that hurt most when you are slow. {ticks} ticks is the window.':
+    '你反应慢时这类报价最伤。窗口是 {ticks} 跳。',
+
+  // 报价生命周期
+  PENDING: '在途',
+  PARTIAL: '部分成交',
+  'Ticks left before the quote reaches the market': '报价到达市场前剩余跳数',
+  'Size ahead of you at this price': '同价位排在你前面的股数',
+  'Filled / quoted quantity': '已成交 / 报价数量',
+  '{ratio}x market spread · {filled} filled': '{ratio} 倍市场价差 · 成交 {filled}',
+  'Client flow · edge {edge}': '客户流 · 边际 {edge}',
+  'Exchange · edge {edge}': '交易所 · 边际 {edge}',
 }

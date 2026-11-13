@@ -26,6 +26,8 @@ interface TopBarProps {
   cash: number
   budget: number
   scoreOpen: boolean
+  /** 回放抽屉是否打开（按钮高亮用） */
+  replayOpen: boolean
   /** 深链带了固定种子时，提示这是全组同一道题 */
   sharedSeed: number | null
   /** 练习时长档位 */
@@ -33,6 +35,7 @@ interface TopBarProps {
   /** 剩余真实时间（毫秒） */
   timeLeftMs: number
   onOpenScore: () => void
+  onOpenReplay: () => void
   onRestart: () => void
   onExit: () => void
 }
@@ -43,10 +46,12 @@ export default function TopBar({
   cash,
   budget,
   scoreOpen,
+  replayOpen,
   sharedSeed,
   minutes,
   timeLeftMs,
   onOpenScore,
+  onOpenReplay,
   onRestart,
   onExit,
 }: TopBarProps) {
@@ -111,6 +116,15 @@ export default function TopBar({
           aria-expanded={scoreOpen}
         >
           {t('SCORE')}
+        </button>
+        <button
+          type="button"
+          className={replayOpen ? 'btn btn--active' : 'btn btn--ghost'}
+          onClick={onOpenReplay}
+          aria-expanded={replayOpen}
+          title={t('Replay this session frame by frame')}
+        >
+          {t('REPLAY')}
         </button>
         <button
           type="button"

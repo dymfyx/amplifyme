@@ -833,6 +833,27 @@ table.grid.grid--book tr.row--bid {
   color: var(--text-2);
 }
 
+/* 报价生命周期：在途（还没挂进盘口）与部分成交 */
+.badge--pending {
+  color: var(--warn);
+  border-color: rgba(245, 166, 35, 0.32);
+  background: rgba(245, 166, 35, 0.06);
+}
+
+.badge--partial {
+  color: var(--accent);
+  border-color: rgba(76, 141, 255, 0.36);
+  background: rgba(76, 141, 255, 0.08);
+}
+
+/* 报价状态后的成交进度 / 队列长度小字 */
+.quote-extra {
+  margin-left: 5px;
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
 /* 成交来源：客户流 vs 交易所主动成交 */
 .badge--client {
   color: var(--accent);
@@ -1958,6 +1979,74 @@ table.grid.grid--setup tbody tr:last-child td {
 
 .report__rows dd {
   margin: 0;
+}
+
+/* 决策审阅：成交被逆向选择、错过的头条、最大回撤、消息灵通客户 */
+.report__review {
+  padding: 10px 12px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.report__review-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.report__review-head .report__card-title {
+  margin: 0;
+}
+
+.report__review-scenario {
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.report__review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.report__review-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.report__review-label {
+  color: var(--text-2);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+}
+
+.report__review-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-1);
+}
+
+.report__review-row > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report__review-empty {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 9px;
+  line-height: 1.35;
 }
 
 .report__score {

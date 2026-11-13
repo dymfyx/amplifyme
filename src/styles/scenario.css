@@ -1,0 +1,237 @@
+/* ------------------------------------------------------------------ */
+/* 情景选择器（入口页）                                                  */
+/* 与 .entry-settings / .chip 保持同一套字号、间距和描边                   */
+/* ------------------------------------------------------------------ */
+
+.scenario-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.scenario-picker__label {
+  margin-right: 6px;
+  color: var(--text-2);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.scenario-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-picker__blurb {
+  flex: 1 0 100%;
+  min-height: 1.3em;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 情景 chip：在 .chip 的尺寸上放宽一点，容得下剧本名字 */
+.scenario-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 110ms ease, border-color 110ms ease, background 110ms ease;
+}
+
+.scenario-chip:hover {
+  border-color: rgba(76, 141, 255, 0.45);
+  color: var(--text-1);
+}
+
+.scenario-chip:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.scenario-chip--on {
+  border-color: rgba(76, 141, 255, 0.5);
+  background: rgba(76, 141, 255, 0.12);
+  color: var(--accent);
+}
+
+.scenario-chip--custom {
+  border-style: dashed;
+}
+
+.scenario-chip--custom:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* 自定义 JSON 弹窗                                                      */
+/* ------------------------------------------------------------------ */
+
+.custom-scenario__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 16, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.custom-scenario {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(560px, 94vw);
+  max-height: 90vh;
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #101b2c, #0a1220);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  animation: custom-scenario-in 140ms ease-out;
+}
+
+@keyframes custom-scenario-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.custom-scenario__head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.custom-scenario__eyebrow {
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.custom-scenario__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.custom-scenario__help {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 9.5px;
+  line-height: 1.6;
+}
+
+.custom-scenario__label {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+.custom-scenario__input {
+  width: 100%;
+  min-height: 200px;
+  padding: 8px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.custom-scenario__input::placeholder {
+  color: rgba(147, 164, 191, 0.5);
+}
+
+.custom-scenario__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(76, 141, 255, 0.35);
+}
+
+.custom-scenario__error {
+  margin: 0;
+  color: var(--down);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.custom-scenario__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.custom-scenario__btn {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: #132033;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 110ms ease, border-color 110ms ease;
+}
+
+.custom-scenario__btn:not(:disabled):hover {
+  border-color: var(--accent);
+  background: #17273d;
+}
+
+.custom-scenario__btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.custom-scenario__btn--example {
+  margin-right: auto;
+  background: transparent;
+}
+
+.custom-scenario__btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #04101f;
+  font-weight: 700;
+}
+
+.custom-scenario__btn--primary:not(:disabled):hover {
+  border-color: #6ba0ff;
+  background: #6ba0ff;
+}
+
+.custom-scenario__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

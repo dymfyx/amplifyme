@@ -4,6 +4,7 @@ import RoleSelect from './screens/RoleSelect'
 import SessionSetup from './screens/SessionSetup'
 import Terminal from './screens/Terminal'
 import { DEFAULT_MINUTES, SESSION_TIERS, type OpeningPosition, type SessionMinutes } from './engine/simulation'
+import { DEFAULT_SCENARIO, SCENARIOS, type Scenario } from './engine/scenarios'
 import { I18nProvider, type Language } from './i18n'
 
 interface DeepLink {
@@ -14,6 +15,8 @@ interface DeepLink {
   language: Language
   /** 链接里指定的练习时长档位 */
   minutes: SessionMinutes
+  /** 链接里指定的情景剧本（内置场景 id，例如 crash） */
+  scenario: Scenario
 }
 
 const isLanguage = (value: string | null): value is Language => value === 'en' || value === 'zh'
@@ -24,10 +27,11 @@ const parseMinutes = (value: string | null): SessionMinutes => {
 }
 
 /**
- * 支持这三种深链：
- *   #sales / #market-maker                                          空仓直接开台
- *   #sales?seed=20261112                                            固定种子（同一道题，可重放）
- *   #market-maker?seed=20261112&lang=zh&minutes=5                   固定种子 + 中文界面 + 5 分钟档
+ * 支持这几种深链：
+ *   #sales / #market-maker                                                      空仓直接开台
+ *   #sales?seed=20261112                                                        固定种子（同一道题，可重放）
+ *   #market-maker?seed=20261112&lang=zh&minutes=5                               固定种子 + 中文界面 + 5 分钟档
+ *   #market-maker?seed=20261112&scenario=crash                                  固定种子 + 崩盘剧本
  */
 const readDeepLink = (): DeepLink | null => {
   const raw = window.location.hash.replace(/^#/, '')
@@ -39,11 +43,14 @@ const readDeepLink = (): DeepLink | null => {
   const seed = seedParam && /^\d{1,9}$/.test(seedParam) ? Number(seedParam) : null
   const langParam = params.get('lang')
   const minutesParam = params.get('minutes')
+  const scenarioParam = params.get('scenario')
+  const scenario = SCENARIOS.find((item) => item.id === scenarioParam) ?? DEFAULT_SCENARIO
   return {
     role: path,
     seed,
     language: isLanguage(langParam) ? langParam : 'en',
     minutes: parseMinutes(minutesParam),
+    scenario,
   }
 }
 
@@ -56,6 +63,7 @@ export default function App() {
   const [seed, setSeed] = useState<number | null>(deepLink?.seed ?? null)
   const [language, setLanguage] = useState<Language>(deepLink?.language ?? 'en')
   const [minutes, setMinutes] = useState<SessionMinutes>(deepLink?.minutes ?? DEFAULT_MINUTES)
+  const [scenario, setScenario] = useState<Scenario>(deepLink?.scenario ?? DEFAULT_SCENARIO)
 
   const reset = () => {
     setConfigured(false)
@@ -71,8 +79,10 @@ export default function App() {
       <RoleSelect
         language={language}
         minutes={minutes}
+        scenario={scenario}
         onLanguage={setLanguage}
         onMinutes={setMinutes}
+        onScenario={setScenario}
         onSelect={(nextRole) => {
           setRole(nextRole)
           setConfigured(false)
@@ -94,7 +104,14 @@ export default function App() {
     )
   } else {
     screen = (
-      <Terminal role={role} openingBook={openingBook} seed={seed} minutes={minutes} onExit={reset} />
+      <Terminal
+        role={role}
+        openingBook={openingBook}
+        seed={seed}
+        minutes={minutes}
+        scenario={scenario}
+        onExit={reset}
+      />
     )
   }
 

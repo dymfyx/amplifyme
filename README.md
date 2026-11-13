@@ -363,3 +363,38 @@ Everyone who opens the same URL gets the same headline script, the same opening 
 (only the decisions differ), so scores are comparable. A `SHARED SEED` chip appears in the top bar, and
 `RESTART` replays the same session from 09:30 instead of drawing a new seed. Without `?seed=`, every visit
 picks a fresh random seed, shown in the status bar as `SEED nnnnnn`.
+
+
+### Scenario library and custom JSON
+
+Pick a scenario on the entry screen next to the language and length chips:
+
+| Scenario | What it is |
+| --- | --- |
+| Classic | Mixed macro and single-name headlines — the standard practice tape |
+| FOMC day | A macro-heavy tape: one rate decision, then repricing across the book |
+| Earnings surprise | Single-name earnings hits: one name gaps, the others react |
+| Risk-off crash | Wide spreads, thin books, correlated selling — the hardest desk day |
+| Short squeeze | Violent squeeze higher, then the unwind |
+
+Scenarios can also come from a URL (`#market-maker?scenario=crash`) or from your own JSON via **CUSTOM JSON**
+(validated in the browser; `USE THE EXAMPLE` loads a working template). A scenario sets the headline script
+plus optional `spreadMultiplier` / `liquidityMultiplier`, so a crash day really does trade wider and thinner.
+`?scenario=` composes with `seed`, `lang` and `minutes`.
+
+### Informed flow, quote queues and partial fills
+
+Not every RFQ is the same. After a headline, some clients turn **informed**: they appear more often, trade the
+name that just moved, and trade in the direction of the news. The engine tracks a decaying news bias per symbol
+and a per-client `clientHeat` memory (wide quotes and declines make a client scarcer). `INFORMED FLOW` in the
+settlement report tells you how many of those RFQs you sent quotes for.
+
+A quote is no longer filled in one go. It goes `PENDING` (1–3 ticks of latency) → `LIVE` (with a `Q<n>` queue
+size ahead of you) → partial fills as marketable volume eats the queue → `FILLED`, `PARTIAL` or `EXPIRED`.
+The LIVE QUOTES blotter shows the latency countdown, queue length and `filled/quoted`.
+
+### Replay and decision review
+
+`REPLAY` in the top bar opens a frame-by-frame drawer: pick a symbol, scrub the session, and jump to any quote,
+fill or headline. The settlement report adds a **DECISION REVIEW** block: fills that were immediately run over
+(picked off), headlines you never traded, your worst drawdown and the informed-flow count.

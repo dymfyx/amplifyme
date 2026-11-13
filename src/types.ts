@@ -58,6 +58,8 @@ export interface NewsItem {
   headline: string
   /** 利好 +1 / 利空 -1；中性提示为空 */
   direction?: 1 | -1
+  /** 个股新闻的标的；宏观新闻为空 */
+  symbol?: string
 }
 
 export interface Rfq {
@@ -88,7 +90,22 @@ export interface QuoteRow {
   offer: number
   offerVolume: number
   validFor: number
-  status: 'LIVE' | 'FILLED' | 'EXPIRED'
+  /**
+   * PENDING  = 已发出，还在去交易所的路上（延迟 1–3 帧）
+   * LIVE     = 已挂上，正在排队
+   * PARTIAL  = 有效期到了，但成交过一部分
+   * FILLED   = 全部成交（一次或多次部分成交累加）
+   * EXPIRED  = 一股没成交就过期了
+   */
+  status: 'PENDING' | 'LIVE' | 'PARTIAL' | 'FILLED' | 'EXPIRED'
+  /** 已成交数量（部分成交时小于报价数量） */
+  filledQty: number
+  /** 报价数量，等于 bidVolume / offerVolume 里我们这一侧的量 */
+  qty: number
+  /** 排队在我们前面的股数（0 表示已经排到队首，下一笔主动流就可能打到我们） */
+  queueAhead: number
+  /** 还要几帧才挂到市场上（PENDING 阶段显示用） */
+  latencyTicks: number
 }
 
 export interface Pnl {
