@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Role } from './types'
+import { ArchiveDrawer } from './components/ArchiveDrawer'
 import RoleSelect from './screens/RoleSelect'
 import SessionSetup from './screens/SessionSetup'
 import Terminal from './screens/Terminal'
 import { DEFAULT_MINUTES, SESSION_TIERS, type OpeningPosition, type SessionMinutes } from './engine/simulation'
 import { DEFAULT_SCENARIO, SCENARIOS, type Scenario } from './engine/scenarios'
 import { I18nProvider, type Language } from './i18n'
+import { useArchive } from './hooks/useArchive'
 
 interface DeepLink {
   role: Role
@@ -56,14 +58,27 @@ const readDeepLink = (): DeepLink | null => {
 
 export default function App() {
   const deepLink = readDeepLink()
+  const archive = useArchive()
   const [role, setRole] = useState<Role | null>(deepLink?.role ?? null)
   // 深链进来时跳过开局设置，直接从空仓开台（方便截图与分享）
   const [configured, setConfigured] = useState(deepLink !== null)
   const [openingBook, setOpeningBook] = useState<OpeningPosition[]>([])
   const [seed, setSeed] = useState<number | null>(deepLink?.seed ?? null)
-  const [language, setLanguage] = useState<Language>(deepLink?.language ?? 'en')
-  const [minutes, setMinutes] = useState<SessionMinutes>(deepLink?.minutes ?? DEFAULT_MINUTES)
-  const [scenario, setScenario] = useState<Scenario>(deepLink?.scenario ?? DEFAULT_SCENARIO)
+  // 没有深链时沿用上次的语言、时长与剧本，省得每次重选
+  const [language, setLanguage] = useState<Language>(deepLink?.language ?? archive.settings.language)
+  const [minutes, setMinutes] = useState<SessionMinutes>(deepLink?.minutes ?? archive.settings.minutes)
+  const [scenario, setScenario] = useState<Scenario>(
+    deepLink?.scenario ??
+      SCENARIOS.find((item) => item.id === archive.settings.scenarioId) ??
+      DEFAULT_SCENARIO,
+  )
+  const [archiveOpen, setArchiveOpen] = useState(false)
+
+  // 入口上的选择立即记进设置，下次打开还是这套（saveSettings 是稳定回调，不能把 archive 放进依赖）
+  const saveSettings = archive.saveSettings
+  useEffect(() => {
+    saveSettings({ language, minutes, scenarioId: scenario.id })
+  }, [saveSettings, language, minutes, scenario.id])
 
   const reset = () => {
     setConfigured(false)
@@ -80,9 +95,11 @@ export default function App() {
         language={language}
         minutes={minutes}
         scenario={scenario}
+        archiveCount={archive.file.sessions.length}
         onLanguage={setLanguage}
         onMinutes={setMinutes}
         onScenario={setScenario}
+        onOpenArchive={() => setArchiveOpen(true)}
         onSelect={(nextRole) => {
           setRole(nextRole)
           setConfigured(false)
@@ -110,10 +127,29 @@ export default function App() {
         seed={seed}
         minutes={minutes}
         scenario={scenario}
+        onSessionSaved={archive.addSession}
         onExit={reset}
       />
     )
   }
 
-  return <I18nProvider lang={language}>{screen}</I18nProvider>
+  return (
+    <I18nProvider lang={language}>
+      {screen}
+      {archiveOpen ? (
+        <ArchiveDrawer
+          file={archive.file}
+          linked={archive.sharedLabel !== null}
+          linkLabel={archive.sharedLabel}
+          busy={archive.busy}
+          onClose={() => setArchiveOpen(false)}
+          onDelete={archive.deleteSession}
+          onClear={archive.clearAll}
+          onImport={archive.importText}
+          onLink={() => void archive.linkSharedFile()}
+          onUnlink={() => void archive.unlinkSharedFile()}
+        />
+      ) : null}
+    </I18nProvider>
+  )
 }

@@ -586,3 +586,24 @@ P0 已交付：
 - `ReplayDrawer`：标的切换、时间轴拖动、事件竖线、决策菱形、播放头、决策日志（点击跳到对应帧）。
 - `decisionReview(state)` 输出 `adverse`（客户成交后 20 tick 内被逆向打穿的前 3 笔）、`missed`（未交易的单名头条与窗口内潜在收益）、`worstDrawdown`、`informed` 计数；结算报告新增 DECISION REVIEW 卡。
 - 测试：`src/engine/flow.test.ts` 9 例新增，加 UI 与既有 engine 用例共 **142** 例；`npm run build` 产出 `index-BKjNei9C.js 350.5 kB │ gzip 109.1 kB`。
+
+## 20. 十台流式智能体（P2.11）
+
+**需求**：台面里除了客户流，还要有一批「人机」对手；先 10 个跑通，规模只受渲染限制，纯前端、确定性可复现。
+
+- `src/engine/agents.ts`：5 种 archetype（informed / momentum / value / maker / noise），10 个固定模板（Sable·Quill 知情、Vector·Comet 动量、Anchor·Ledger 价值、Pylon·Harbor 做市、Fizz·Drift 噪音），每人 `cash / startCash / positions / aggression / size / nextActionAt`，起始 $1M、毛敞口上限 2.5×、单笔冲击上限 3.5bps、冷却 6–16 tick。
+- 决策是纯函数 + 注入 RNG：知情跟 `newsBias`、动量看 6 根内涨跌、价值相对开盘价逆势、做市对短期波动反向、噪音随机。成交价吃半个价差，允许超仓反手；P&L 直接由 `cash + 持仓市值 − startCash` 得出（不再单独累加 realised，避免重复）。
+- `aggregateFlows` 把同一标的的净流量压成一条 `PriceImpulse{source:'agent'}`，所以智能体与新闻走同一条价格链；其成交量还会消耗我们报价前面的队列（`marketVolume += agentVolume/2`），在活跃名字上成交更快。成交记录带 `counterparty` 名字。
+- `FLOW` 抽屉（`ParticipantsDrawer`）：10 行 participant（类型、方向、持仓市值、P&L、最近动作）+ 合计盈亏，支持 ESC/遮罩关闭；价格带的驱动标签用 archetype（`informed buy` 等）。
+- 测试：`src/engine/agents.test.ts` 10 例（确定性、聚合、冷却、对冲、价格链、可复现）；全量 194 例。
+
+## 21. 本地存档（P2.11）
+
+**需求**：每一局都要能回看；同机换浏览器也要能看到自己的记录，但不引入后端。
+
+- `src/storage/archive.ts`：`market-sim.archive.v1` / `market-sim.settings.v1`，`ArchiveFile { version, updatedAt, sessions, settings }`，最多 100 条，`makeSessionId(desk, seed, scenarioId, minutes, closedLabel)` 去重，读坏数据静默回退空档，所有 localStorage 访问 try/catch。
+- `src/storage/shared-file.ts`：File System Access API + IndexedDB 句柄持久化，`pickArchiveFile / readArchiveHandle / writeArchiveHandle / requestHandlePermission`；不支持时安全降级，导入/导出仍可用。
+- `src/hooks/useArchive.ts`：localStorage 为主副本，链接共享文件后每次写入同步覆盖该 JSON；启动时恢复句柄并 `mergeArchives` 远端记录。
+- UI：入口页 `ARCHIVE (n)` → `ArchiveDrawer`（EXPORT / IMPORT / LINK ARCHIVE FILE、行展开 14 项详情、DELETE / CLEAR ALL 二次确认、ESC 关闭）；入口页同时记住上次的语言、时长与剧本。
+- 结算自动存档：`Terminal` 在 `status === 'CLOSED'` 时用 `selectSettlement / scoreSession / decisionReview` 组装一条记录并 upsert（同 id 只写一次）。
+- 测试：`archive.test.ts` 24 例 + `archive-drawer.test.tsx` 11 例 + app 4 例；全量 **194** 例，`npm run build` 产出 `index-htgGvodo.js 380.6 kB │ gzip 119.4 kB`。

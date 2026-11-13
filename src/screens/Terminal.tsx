@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Role } from '../types'
 import {
   DEFAULT_MINUTES,
   STARTING_CASH,
   createSession,
+  selectAgents,
   selectBook,
   selectCash,
   selectChartMarkers,
@@ -33,6 +34,7 @@ import {
 import { NEWS_REACTION_TICKS } from '../engine/telemetry'
 import { useT } from '../i18n'
 import { useSimulation } from '../hooks/useSimulation'
+import { makeSessionId, type ArchivedSession } from '../storage/archive'
 import ChartPanel from '../components/ChartPanel'
 import BookPanel from '../components/BookPanel'
 import DispatchPanel from '../components/DispatchPanel'
@@ -41,6 +43,7 @@ import ExchangeTicket from '../components/ExchangeTicket'
 import MarketWatch from '../components/MarketWatch'
 import PriceTape from '../components/PriceTape'
 import PositionsPanel from '../components/PositionsPanel'
+import ParticipantsDrawer from '../components/ParticipantsDrawer'
 import ScoreDrawer from '../components/ScoreDrawer'
 import ReplayDrawer, {
   type ReplayDecision,
@@ -60,6 +63,8 @@ interface TerminalProps {
   minutes?: SessionMinutes
   /** 本局的情景剧本：新闻时间轴、价差/流动性系数都由它决定 */
   scenario: Scenario
+  /** 本局结算后自动写入本地存档 */
+  onSessionSaved?: (session: ArchivedSession) => void
   onExit: () => void
 }
 
@@ -69,6 +74,7 @@ export default function Terminal({
   seed = null,
   minutes = DEFAULT_MINUTES,
   scenario,
+  onSessionSaved,
   onExit,
 }: TerminalProps) {
   const t = useT()
@@ -80,6 +86,7 @@ export default function Terminal({
   const [activeRfqId, setActiveRfqId] = useState<string | null>('RFQ-201')
   const [scoreOpen, setScoreOpen] = useState(false)
   const [replayOpen, setReplayOpen] = useState(false)
+  const [flowOpen, setFlowOpen] = useState(false)
   const [reportDismissed, setReportDismissed] = useState(false)
 
   const instruments = selectInstruments(state)
@@ -107,6 +114,41 @@ export default function Terminal({
   const review = decisionReview(state)
   const scenarioMeta = selectScenario(state)
   const history = selectHistory(state)
+  const agents = selectAgents(state)
+  /* 每次结算写一条本地存档：同 seed/剧本/时长且同一收盘点的重复渲染只写一次 */
+  const savedIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!closed || !onSessionSaved) return
+    const desk = role === 'sales' ? 'sales' : 'market-maker'
+    const id = makeSessionId(desk, meta.seed, scenarioMeta.id, meta.minutes, meta.clock)
+    if (savedIdRef.current === id) return
+    savedIdRef.current = id
+    onSessionSaved({
+      id,
+      savedAt: new Date().toISOString(),
+      desk,
+      scenarioId: scenarioMeta.id,
+      scenarioName: scenarioMeta.name,
+      minutes: meta.minutes,
+      seed: meta.seed,
+      total: settlement.total,
+      realised: settlement.realised,
+      unrealised: settlement.unrealised,
+      commission: settlement.commission,
+      cash: settlement.cash,
+      benchmarkPnl: settlement.benchmarkPnl,
+      alpha: settlement.alpha,
+      composite: score.composite,
+      percentile: score.percentile,
+      trades: settlement.trades,
+      quotes: settlement.quotes,
+      informedFills: review.informed.fills,
+      informedRfqs: review.informed.rfqs,
+      adverse: review.adverse.length,
+      missed: review.missed.length,
+      worstDrawdown: review.worstDrawdown ? review.worstDrawdown.dollars : 0,
+    })
+  }, [closed, onSessionSaved, role, meta.seed, meta.minutes, meta.clock, scenarioMeta.id, scenarioMeta.name, settlement, score, review])
 
   /* 回放：价格帧直接用引擎历史；决策与事件从遥测里还原成时间轴上的点 */
   const timeAtTick = new Map(history.map((frame) => [frame.tick, frame.time]))
@@ -195,11 +237,13 @@ export default function Terminal({
         budget={STARTING_CASH}
         scoreOpen={scoreOpen}
         replayOpen={replayOpen}
+        flowOpen={flowOpen}
         sharedSeed={seed}
         minutes={meta.minutes}
         timeLeftMs={meta.timeLeftMs}
         onOpenScore={() => setScoreOpen(true)}
         onOpenReplay={() => setReplayOpen(true)}
+        onOpenFlow={() => setFlowOpen(true)}
         onRestart={handleRestart}
         onExit={onExit}
       />
@@ -266,6 +310,7 @@ export default function Terminal({
 
       <StatusBar meta={meta} onTogglePause={simulation.togglePause} onCycleSpeed={simulation.cycleSpeed} />
 
+      {flowOpen ? <ParticipantsDrawer agents={agents} onClose={() => setFlowOpen(false)} /> : null}
       {scoreOpen ? <ScoreDrawer score={score} onClose={() => setScoreOpen(false)} /> : null}
       {replayOpen ? (
         <ReplayDrawer

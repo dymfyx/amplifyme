@@ -398,3 +398,47 @@ The LIVE QUOTES blotter shows the latency countdown, queue length and `filled/qu
 `REPLAY` in the top bar opens a frame-by-frame drawer: pick a symbol, scrub the session, and jump to any quote,
 fill or headline. The settlement report adds a **DECISION REVIEW** block: fills that were immediately run over
 (picked off), headlines you never traded, your worst drawdown and the informed-flow count.
+
+### Machine flow: ten trading agents
+
+`FLOW` in the top bar opens a desk-level view of ten rule-based trading agents that run inside the same engine:
+
+| Agent | Archetype | What it does |
+| --- | --- | --- |
+| Sable, Quill | informed | Trade the name that just moved, in the direction of fresh news |
+| Vector, Comet | momentum | Chase a move once it is already in the tape |
+| Anchor, Ledger | value | Fade a move when price stretches from the open |
+| Pylon, Harbor | market maker | Lean against short-term volatility, take the other side |
+| Fizz, Drift | noise | Trade at random, provide background flow |
+
+Each agent has its own cash, inventory and cooldown. Their fills are priced off the touch, aggregated per symbol
+and released into the tape as a `PriceImpulse` (source `agent`), so they move the market exactly like headlines
+do — and their size also eats the queue in front of your quotes, which makes your quotes fill faster on busy
+names. The price tape labels the flow by archetype (`informed buy`, `momentum sell`, …), and fills that land on
+your client quotes carry the counterparty agent name in the telemetry.
+
+The FLOW drawer shows live inventory, gross exposure, P&L and last action for all ten. Everything is seeded
+deterministically: the same `seed` produces the same agents, the same decisions and the same price path.
+
+### Local archive: every session is kept
+
+The entry screen has an **ARCHIVE (n)** link. Each session writes one record the moment the clock runs out: desk,
+scenario, length, seed, total/realised/unrealised P&L, commission, cash left, buy & hold benchmark and alpha,
+composite score and percentile, trade and quote counts, informed-flow counts, picked-off and missed-headline
+counts, and worst drawdown. Records are capped at 100 and de-duplicated by desk + seed + scenario + length + close time.
+
+Storage is local: `localStorage` under `market-sim.archive.v1`, versioned so a future schema change can migrate
+instead of reset. Three ways to keep it safe:
+
+| Action | What it does |
+| --- | --- |
+| **EXPORT** | Downloads `market-sim-archive.json` |
+| **IMPORT** | Merges a JSON file back in (validated; bad files are rejected with an error) |
+| **LINK ARCHIVE FILE** | Chromium/Edge only: pick a JSON file with the File System Access API, and every new record is written to that file too. Chrome and Edge on the same machine can point at the same file, so switching browsers keeps your history |
+
+Without a browser that supports the File System Access API, import/export still works. The archive never leaves
+your machine — no account, no server. Clearing site data, private windows, a different domain or the offline
+single-file build each start from an empty archive.
+
+The entry screen also remembers the last language, session length and scenario in
+`market-sim.settings.v1`, so you do not re-pick them every visit.

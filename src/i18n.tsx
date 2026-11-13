@@ -1,4 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { zhAgents } from './i18n/zh-agents'
+import { zhArchive } from './i18n/zh-archive'
 import { zhChrome } from './i18n/zh-chrome'
 import { zhData } from './i18n/zh-data'
 import { zhPanels } from './i18n/zh-panels'
@@ -15,7 +17,15 @@ export const languageLabel: Record<Language, string> = {
 }
 
 /** 所有中文文案都从这几个字典里查；英文是源码里的原文，查不到就原样输出 */
-const ZH: Record<string, string> = { ...zhChrome, ...zhPanels, ...zhData, ...zhScenario, ...zhReplay }
+const ZH: Record<string, string> = {
+  ...zhChrome,
+  ...zhPanels,
+  ...zhData,
+  ...zhArchive,
+  ...zhScenario,
+  ...zhReplay,
+  ...zhAgents,
+}
 
 export type Translate = (text: string, vars?: Record<string, string | number>) => string
 

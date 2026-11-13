@@ -51,6 +51,8 @@ export interface FillRecord {
   clientType?: ClientType
   /** 客户流成交时来自哪张报价 */
   quoteId?: string
+  /** 这笔客户流的对手方是哪个流式智能体（没有就是普通流动性） */
+  counterparty?: string
 }
 
 export interface ExposureSample {

@@ -14,6 +14,16 @@ import type {
 import { nextRandom, normalish, pickOne, randomInt, createSeed } from './rng'
 import { DISPATCH_NOTES, FLOW_EVENTS, NEWS_TEMPLATES, SYMBOLS, UNIVERSE } from './scenario'
 import {
+  aggregateFlows,
+  agentViews,
+  createAgents,
+  findCounterparty,
+  stepAgents,
+  type AgentFlow,
+  type AgentState,
+  type AgentView,
+} from './agents'
+import {
   DEFAULT_CLIENTS,
   DEFAULT_SCENARIO,
   type ClientProfile,
@@ -128,7 +138,7 @@ const pad = (value: number) => String(Math.floor(value)).padStart(2, '0')
 export type SessionStatus = 'RUNNING' | 'PAUSED' | 'CLOSED'
 
 /** 价格变动的解释来源：headline = 新闻冲量，flow = 市场微观流动，fill = 我们自己的成交冲击 */
-export type DriverSource = 'headline' | 'flow' | 'fill'
+export type DriverSource = 'headline' | 'flow' | 'fill' | 'agent'
 
 /** 某一次价格刷新里起作用的一个驱动因素 */
 export interface PriceDriver {
@@ -287,6 +297,8 @@ export interface SimulationState {
   newsBias: Record<string, number>
   /** 每帧的价格快照，回放用 */
   history: PriceFrame[]
+  /** 10 个流式智能体：它们主动买卖、推动价格，也可能成为我们报价的对手方 */
+  agents: AgentState[]
 }
 
 /** 回放用的一帧：时间和五个名字的最新价 */
@@ -461,6 +473,10 @@ export function createSession(
     }
   })
 
+  /* 10 个流式智能体：各自有现金与持仓，主动买卖并把净流量汇成价格冲击 */
+  const [agents, afterAgents] = createAgents(rng)
+  rng = afterAgents
+
   return {
     rng,
     seed,
@@ -514,6 +530,7 @@ export function createSession(
         prices: Object.fromEntries(instruments.map((instrument) => [instrument.symbol, instrument.last])),
       },
     ],
+    agents,
   }
 }
 
@@ -759,6 +776,29 @@ export function stepSession(state: SimulationState): SimulationState {
     }
   }
 
+  /* 1d. 10 个流式智能体：各自决定买/卖/不动，同一标的的流量汇总成一次价格冲击。
+     它们不挂单，只贡献「主动成交」，所以既会推动价格，也会消耗盘口上排在我们前面的量。 */
+  const agentStep = stepAgents(state.agents, rng, {
+    tick,
+    instruments: state.instruments.map((instrument) => ({
+      symbol: instrument.symbol,
+      last: instrument.last,
+      openPrice: instrument.openPrice,
+      series: instrument.series,
+      lot: instrument.lot,
+      spreadBps: instrument.spreadBps,
+    })),
+    newsBias,
+  })
+  rng = agentStep.rng
+  const agents = agentStep.agents
+  const agentFlows: AgentFlow[] = agentStep.flows
+  const agentFlowBySymbol = new Map(aggregateFlows(agentFlows).map((flow) => [flow.symbol, flow]))
+  const agentVolumeBySymbol = new Map<string, number>()
+  for (const flow of agentFlows) {
+    agentVolumeBySymbol.set(flow.symbol, (agentVolumeBySymbol.get(flow.symbol) ?? 0) + flow.qty)
+  }
+
   /* 2. 价格与盘口：时钟每帧都走，行情每 PRICE_UPDATE_TICKS 帧（0.25 秒）刷新一次 */
   const priceDue = tick - state.lastPriceTick >= PRICE_UPDATE_TICKS
   let priceTape = state.priceTape
@@ -807,13 +847,26 @@ export function stepSession(state: SimulationState): SimulationState {
           }
         }
 
+        /* 这一帧里 10 个流式智能体在同一标的上的净流量 */
+        const agentFlow = agentFlowBySymbol.get(instrument.symbol) ?? null
+        const agentDriver: PriceDriver | null = agentFlow
+          ? {
+              label: agentFlow.label,
+              direction: agentFlow.direction,
+              bps: Math.abs(agentFlow.bps),
+              source: 'agent',
+              hint: agentFlow.hint,
+            }
+          : null
+
         const netBps = round2(
           released.reduce((sum, driver) => sum + driver.direction * driver.bps, 0) +
-            (flowDriver ? flowDriver.direction * flowDriver.bps : 0),
+            (flowDriver ? flowDriver.direction * flowDriver.bps : 0) +
+            (agentFlow ? agentFlow.bps : 0),
         )
         const last = round2(Math.max(0.01, instrument.last * (1 + netBps / 10000)))
         const direction: 1 | -1 = netBps >= 0 ? 1 : -1
-        const drivers = [...released, ...(flowDriver ? [flowDriver] : [])]
+        const drivers = [...released, ...(flowDriver ? [flowDriver] : []), ...(agentDriver ? [agentDriver] : [])]
           .sort((a, b) => b.bps - a.bps)
           .slice(0, MAX_PRICE_DRIVERS)
         /* 用「和实际涨跌方向一致的最大驱动」解释这次变动，箭头就不会和标签打架 */
@@ -841,7 +894,11 @@ export function stepSession(state: SimulationState): SimulationState {
         const headlineBps = released.reduce((sum, candidate) => sum + candidate.bps, 0)
         let book = instrument.book
         let bookMid = instrument.bookMid
-        if (headlineBps >= FORCED_REBOOK_BPS || movedBps >= BOOK_MIN_MOVE_BPS) {
+        if (
+          headlineBps >= FORCED_REBOOK_BPS ||
+          movedBps >= BOOK_MIN_MOVE_BPS ||
+          Math.abs(agentFlow?.bps ?? 0) >= FORCED_REBOOK_BPS
+        ) {
           const [nextBook, afterBook] = makeBook(rng, last, instrument.spreadBps, instrument.lot, instrument.book)
           rng = afterBook
           book = nextBook
@@ -906,7 +963,10 @@ export function stepSession(state: SimulationState): SimulationState {
     const lot = instruments.find((item) => item.symbol === quote.symbol)?.lot ?? 100
     const [volRoll, afterVol] = nextRandom(rng)
     rng = afterVol
-    const marketVolume = Math.round(lot * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN)))
+    /* 智能体的主动单也在消耗盘口，所以它们活跃时我们的报价更容易被成交 */
+    const agentVolume = Math.round((agentVolumeBySymbol.get(quote.symbol) ?? 0) * 0.5)
+    const marketVolume =
+      Math.round(lot * (QUEUE_FLOW_MIN + volRoll * (QUEUE_FLOW_MAX - QUEUE_FLOW_MIN))) + agentVolume
     const queueBefore = quote.queueAhead
     const queueAhead = Math.max(0, queueBefore - marketVolume)
     /* 排在队首之后的帧数：清空队列的那一帧定格，用来衡量「报价被晾了多久」 */
@@ -980,6 +1040,7 @@ export function stepSession(state: SimulationState): SimulationState {
           venue: 'client',
           clientType: quote.clientType,
           quoteId: quote.id,
+          counterparty: findCounterparty(agentFlows, quote.symbol, quote.clientSide) ?? undefined,
         })
         const filledQty = quote.filledQty + fillQty
         telemetry = patchQuote(telemetry, quote.id, { filledQty })
@@ -1111,6 +1172,7 @@ export function stepSession(state: SimulationState): SimulationState {
     newsBias,
     clientHeat,
     history,
+    agents,
   }
 }
 
@@ -1578,12 +1640,30 @@ export function selectClientHeat(state: SimulationState): Record<string, number>
   return state.clientHeat
 }
 
+/** 10 个流式智能体的实时状态：持仓、盈亏、最近一笔动作，给 FLOW 抽屉 */
+export function selectAgents(state: SimulationState): AgentView[] {
+  return agentViews(state.agents, {
+    tick: state.tick,
+    instruments: state.instruments.map((instrument) => ({
+      symbol: instrument.symbol,
+      last: instrument.last,
+      openPrice: instrument.openPrice,
+      series: instrument.series,
+      lot: instrument.lot,
+      spreadBps: instrument.spreadBps,
+    })),
+    newsBias: state.newsBias,
+  })
+}
+
 /** 最近的价格变动记录：只留下有明显来源或幅度够看的，给 PRICE TAPE 面板 */
 export function selectPriceTape(state: SimulationState, limit = 7, minBps = 4): PriceChangeRecord[] {
   const notable = state.priceTape.filter(
     (change) =>
       Math.abs(change.bps) >= minBps ||
-      change.drivers.some((driver) => driver.source === 'headline' || driver.source === 'fill'),
+      change.drivers.some(
+        (driver) => driver.source === 'headline' || driver.source === 'fill' || driver.source === 'agent',
+      ),
   )
   return notable.slice(-limit)
 }

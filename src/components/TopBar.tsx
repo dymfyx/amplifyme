@@ -28,6 +28,8 @@ interface TopBarProps {
   scoreOpen: boolean
   /** 回放抽屉是否打开（按钮高亮用） */
   replayOpen: boolean
+  /** 智能体流量抽屉是否打开 */
+  flowOpen: boolean
   /** 深链带了固定种子时，提示这是全组同一道题 */
   sharedSeed: number | null
   /** 练习时长档位 */
@@ -36,6 +38,7 @@ interface TopBarProps {
   timeLeftMs: number
   onOpenScore: () => void
   onOpenReplay: () => void
+  onOpenFlow: () => void
   onRestart: () => void
   onExit: () => void
 }
@@ -47,11 +50,13 @@ export default function TopBar({
   budget,
   scoreOpen,
   replayOpen,
+  flowOpen,
   sharedSeed,
   minutes,
   timeLeftMs,
   onOpenScore,
   onOpenReplay,
+  onOpenFlow,
   onRestart,
   onExit,
 }: TopBarProps) {
@@ -109,6 +114,15 @@ export default function TopBar({
             {t('SHARED SEED')}
           </span>
         )}
+        <button
+          type="button"
+          className={flowOpen ? 'btn btn--active' : 'btn btn--ghost'}
+          onClick={onOpenFlow}
+          aria-expanded={flowOpen}
+          title={t('See what the ten machine traders are doing')}
+        >
+          {t('FLOW')}
+        </button>
         <button
           type="button"
           className={scoreOpen ? 'btn btn--active' : 'btn btn--ghost'}

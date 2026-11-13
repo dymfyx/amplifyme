@@ -49,6 +49,9 @@ interface RoleSelectProps {
   onLanguage: (language: Language) => void
   onMinutes: (minutes: SessionMinutes) => void
   onScenario: (scenario: Scenario) => void
+  /** 本地存档里已有多少条记录 */
+  archiveCount: number
+  onOpenArchive: () => void
   onSelect: (role: Role) => void
 }
 
@@ -59,6 +62,8 @@ export default function RoleSelect({
   onLanguage,
   onMinutes,
   onScenario,
+  archiveCount,
+  onOpenArchive,
   onSelect,
 }: RoleSelectProps) {
   const t = useT()
@@ -149,6 +154,9 @@ export default function RoleSelect({
           <span>{t('SCENARIO · REAL-WORLD EVENT REPLAY')}</span>
           <span>{t('MARKET · EQUITIES')}</span>
           <span>{t('MODE · PRACTICE')}</span>
+          <button type="button" className="role-select__archive" onClick={onOpenArchive}>
+            {t('ARCHIVE ({count})', { count: archiveCount })}
+          </button>
           <a className="role-select__guide" href="./beginner-guide.pdf" target="_blank" rel="noreferrer">
             {t('BEGINNER GUIDE (PDF)')}
           </a>

@@ -1,0 +1,300 @@
+/* 本地存档抽屉（ArchiveDrawer）。所有选择器都以 .archive 开头，避免影响主界面。 */
+
+.archive-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 8, 16, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.archive {
+  display: flex;
+  flex-direction: column;
+  width: min(880px, 94vw);
+  max-height: 88vh;
+  overflow: hidden;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  color: var(--text-1);
+  font-family: inherit;
+}
+
+/* 头部：ARCHIVE / Saved sessions / CLOSE */
+.archive__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.archive__heading {
+  min-width: 0;
+}
+
+.archive__kicker {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.archive__title {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+
+/* 工具条：EXPORT / IMPORT / 链接共享文件 */
+.archive__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.archive__toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.archive__tool {
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.archive__tool:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.archive__tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.archive__file-input {
+  display: none;
+}
+
+.archive__shared {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.archive__shared-label {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 列表主体：唯一滚动区域，表头吸顶 */
+.archive__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px;
+}
+
+.archive__empty {
+  margin: 0;
+  padding: 44px 0;
+  color: var(--text-2);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.archive__head,
+.archive__row {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1.35fr 0.5fr 0.85fr 0.85fr 0.6fr;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.archive__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 0 8px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.archive__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.archive__row-wrap {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.archive__row {
+  width: 100%;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.archive__row:hover {
+  background: rgba(76, 141, 255, 0.06);
+}
+
+.archive__row--selected {
+  background: rgba(76, 141, 255, 0.1);
+}
+
+.archive__cell {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive__cell--date {
+  color: var(--text-2);
+}
+
+.archive__cell--scenario {
+  color: var(--text-1);
+}
+
+.archive__cell--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 展开的详情：两列指标网格 */
+.archive__detail {
+  padding: 10px 0 14px;
+  border-top: 1px dashed var(--line);
+  background: rgba(10, 16, 28, 0.35);
+}
+
+.archive__detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+}
+
+.archive__metric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.archive__metric-label {
+  color: var(--text-2);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.archive__metric-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.archive__value--up {
+  color: var(--up);
+}
+
+.archive__value--down {
+  color: var(--down);
+}
+
+/* 底部操作：删除选中 / 清空全部 */
+.archive__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.archive__footer-spacer {
+  flex: 1 1 auto;
+}
+
+.archive__action {
+  padding: 7px 12px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.archive__action:hover {
+  border-color: var(--text-2);
+  color: var(--text-1);
+}
+
+.archive__action--danger {
+  border-color: rgba(255, 92, 108, 0.45);
+  color: var(--down);
+}
+
+.archive__action--danger:hover {
+  border-color: var(--down);
+  color: var(--down);
+  background: rgba(255, 92, 108, 0.08);
+}
+
+@media (max-width: 620px) {
+  .archive__detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .archive__head,
+  .archive__row {
+    grid-template-columns: 1.3fr 0.9fr 1.2fr 0.5fr 0.9fr 0.9fr;
+  }
+
+  .archive__cell--score {
+    display: none;
+  }
+}

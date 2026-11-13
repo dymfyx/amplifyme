@@ -2,14 +2,18 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import StatusBar from '../components/StatusBar'
+import { readArchive, readSettings } from '../storage/archive'
 
 beforeEach(() => {
+  // 语言/时长/剧本现在会存进本地设置，测试之间必须清掉，否则上一条用例的语言会漏到下一��
+  window.localStorage.clear()
   vi.useFakeTimers()
 })
 
 afterEach(() => {
   vi.useRealTimers()
   window.location.hash = ''
+  window.localStorage.clear()
 })
 
 const openDesk = (desk: 'Sales' | 'Market Maker') => {
@@ -435,5 +439,80 @@ describe('exchange trading', () => {
     expect(screen.getByRole('button', { name: '市价买入' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^成交/ }))
     expect(screen.getByText('来源')).toBeInTheDocument()
+  })
+})
+
+describe('machine flow', () => {
+  it('opens the flow drawer with the ten machine traders', () => {
+    openDesk('Market Maker')
+    fireEvent.click(screen.getByRole('button', { name: 'FLOW' }))
+    expect(screen.getByRole('heading', { name: 'Ten machines, one market' })).toBeInTheDocument()
+    expect(screen.getByTestId('agent-AI-01')).toBeInTheDocument()
+    expect(screen.getByTestId('agent-AI-10')).toBeInTheDocument()
+    expect(screen.getByText('THEIR COMBINED P&L')).toBeInTheDocument()
+  })
+
+  it('closes the flow drawer on escape', () => {
+    openDesk('Market Maker')
+    fireEvent.click(screen.getByRole('button', { name: 'FLOW' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('heading', { name: 'Ten machines, one market' })).not.toBeInTheDocument()
+  })
+
+  it('localises the flow drawer in Chinese', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Chinese' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Market Maker' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Market Maker desk' }))
+    fireEvent.click(screen.getByRole('button', { name: '资金流' }))
+    expect(screen.getByRole('heading', { name: '十台机器，一个市场' })).toBeInTheDocument()
+    expect(screen.getByText('它们的合计盈亏')).toBeInTheDocument()
+  })
+})
+
+describe('local archive', () => {
+  it('remember the entry settings between visits', () => {
+    const first = render(<App />)
+    // 剧本 chip 的名称会跟着语言变，先按英文点，再切中文
+    fireEvent.click(screen.getByRole('button', { name: 'Risk-off crash' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Chinese' }))
+    fireEvent.click(screen.getByRole('button', { name: '5 minute session' }))
+    expect(readSettings()).toMatchObject({ language: 'zh', minutes: 5, scenarioId: 'crash' })
+    first.unmount()
+
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Chinese' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '5 minute session' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens the archive drawer from the entry screen', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /^ARCHIVE \(0\)$/ }))
+    expect(screen.getByRole('dialog', { name: 'Session archive' })).toBeInTheDocument()
+    expect(screen.getByText('Saved sessions')).toBeInTheDocument()
+  })
+
+  it('saves the finished session once the clock runs out', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    expect(screen.getByRole('heading', { name: 'Settlement report' })).toBeInTheDocument()
+    const stored = readArchive()
+    expect(stored.sessions).toHaveLength(1)
+    expect(stored.sessions[0]).toMatchObject({ desk: 'sales', minutes: 5, seed: 7 })
+  })
+
+  it('lists the saved session in the archive drawer', () => {
+    window.location.hash = '#sales?seed=7&minutes=5'
+    render(<App />)
+    act(() => {
+      vi.advanceTimersByTime(301_000)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Close settlement report' }))
+    fireEvent.click(screen.getByRole('button', { name: 'EXIT DESK' }))
+    fireEvent.click(screen.getByRole('button', { name: /^ARCHIVE \(1\)$/ }))
+    expect(screen.getAllByText(/Sales/).length).toBeGreaterThan(0)
   })
 })

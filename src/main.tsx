@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './styles/scenario.css'
 import './styles/replay.css'
+import './styles/archive.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
