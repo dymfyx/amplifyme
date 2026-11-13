@@ -479,6 +479,15 @@ button {
   flex: none;
 }
 
+/* 交易所票据：客户流之外的第二条腿，主动吃盘口流动性 */
+.panel--exchange {
+  flex: none;
+}
+
+.exchange .ticket__grid {
+  grid-template-columns: 1.15fr 0.85fr 0.9fr 0.9fr;
+}
+
 .panel--chart {
   flex: 1 1 auto;
   min-height: 150px;
@@ -822,6 +831,19 @@ table.grid.grid--book tr.row--bid {
 .badge--expired,
 .badge--cancelled {
   color: var(--text-2);
+}
+
+/* 成交来源：客户流 vs 交易所主动成交 */
+.badge--client {
+  color: var(--accent);
+  border-color: rgba(76, 141, 255, 0.38);
+  background: rgba(76, 141, 255, 0.08);
+}
+
+.badge--exchange {
+  color: var(--warn);
+  border-color: rgba(245, 166, 35, 0.38);
+  background: rgba(245, 166, 35, 0.08);
 }
 
 .side {

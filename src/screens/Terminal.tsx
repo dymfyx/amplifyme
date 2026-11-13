@@ -14,6 +14,7 @@ import {
   selectPriceTape,
   selectSeries,
   selectSessionMeta,
+  type ExchangeTradeInput,
   type FillInput,
   type OpeningPosition,
   type QuoteInput,
@@ -27,6 +28,7 @@ import ChartPanel from '../components/ChartPanel'
 import BookPanel from '../components/BookPanel'
 import DispatchPanel from '../components/DispatchPanel'
 import EventFeed from '../components/EventFeed'
+import ExchangeTicket from '../components/ExchangeTicket'
 import MarketWatch from '../components/MarketWatch'
 import PriceTape from '../components/PriceTape'
 import PositionsPanel from '../components/PositionsPanel'
@@ -103,6 +105,7 @@ export default function Terminal({
 
   const handleQuote = (input: QuoteInput) => simulation.sendQuote(input)
   const handleFill = (input: FillInput) => simulation.fillClientOrder(input)
+  const handleExchangeTrade = (input: ExchangeTradeInput) => simulation.tradeOnExchange(input)
   const handleDecline = () =>
     activeRfq ? simulation.declineDispatch(activeRfq.id) : 'NO DISPATCH SELECTED'
 
@@ -166,6 +169,13 @@ export default function Terminal({
             onQuote={handleQuote}
             onFill={handleFill}
             onDecline={handleDecline}
+          />
+          <ExchangeTicket
+            key={`exchange-${selected}-${state.seed}`}
+            instrument={instrument}
+            book={book}
+            cash={cash}
+            onTrade={handleExchangeTrade}
           />
           <ChartPanel
             instrument={instrument}

@@ -543,3 +543,16 @@ P0 已交付：
 ### 新手指南
 
 - `docs/beginner-guide.pdf`：中文，白底 A4，含入口/开局持仓/做市台面/销售台面/结算报告五张截图，覆盖两个台面的玩法、行情驱动机制（新闻、流动、自己的成交冲击）、三档时长、快捷键、评分与基准、分享链接与常见问题。
+
+## 19. 客户流与交易所两条腿（P2.9）
+
+**需求**：客户流和自己主动买卖要区分开；银行端也能自己在交易所买卖（从客户买、去交易所卖，反过来也行），赚价差。
+
+**实现**
+
+- `Venue = 'client' | 'exchange'` 写进 `OrderRow` / `TradeRow` / `FillRecord`，台账与结算报告按来源拆分。
+- 引擎新增 `exchangeLiquidity(levels)`、`walkBook(levels, qty)`（逐档加权均价，流动性不足返回 null）与 `tradeOnExchange(state, { symbol, side, qty })`：市价吃单，成交价取扫单均价，收 5bps 佣金，并对成交额施加 `applyFillImpact` 冲击；拒单覆盖数量、未知标的、盘口不足、现金不足。
+- UI 新增 `ExchangeTicket`（面板 5）：`Best price` / `Est. avg price` / `BOOK SIZE` / `NOTIONAL` / `COMMISSION`，`BUY AT MARKET` / `SELL AT MARKET`；后续面板编号顺移（图表 6、账簿 7、价格带 8、事件流 9）。
+- 台账：RECENT FILLS 与 BOOK 的 TRADES 增加 `VENUE` 徽标列（客户=蓝、交易所=橙）。
+- 结算报告：FLOW 卡新增 `Venue split` 与 `Spread capture`（Σ edge×qty，负数标红）；`Hit ratio` / `Avg edge` 只统计客户流成交，避免主动吃单的负 edge 污染报价质量指标。
+- 测试：`src/engine/exchange.test.ts` 9 例 + app 4 例（面板渲染、市价成交消息与徽标、客户徽标、中文标签），全量 118 例。

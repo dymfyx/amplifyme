@@ -9,7 +9,9 @@ import {
   setSpeed as applySpeed,
   stepSession,
   togglePause,
+  tradeOnExchange,
   type ActionResult,
+  type ExchangeTradeInput,
   type FillInput,
   DEFAULT_MINUTES,
   type OpeningPosition,
@@ -22,6 +24,8 @@ export interface SimulationApi {
   state: SimulationState
   latencyMs: number
   fillClientOrder: (input: FillInput) => string
+  /** 自己在交易所主动成交（吃盘口流动性），与客户流分开记账 */
+  tradeOnExchange: (input: ExchangeTradeInput) => string
   sendQuote: (input: QuoteInput) => string
   declineDispatch: (rfqId: string) => string
   togglePause: () => void
@@ -81,6 +85,7 @@ export function useSimulation(
       state,
       latencyMs,
       fillClientOrder: (input) => run((current) => fillClientOrder(current, input)),
+      tradeOnExchange: (input) => run((current) => tradeOnExchange(current, input)),
       sendQuote: (input) => run((current) => sendQuote(current, input)),
       declineDispatch: (rfqId) => run((current) => declineDispatch(current, rfqId)),
       togglePause: () => commit(togglePause(latest.current)),

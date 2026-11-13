@@ -142,6 +142,16 @@ export default function SettlementReport({
                 </dd>
               </div>
               <div>
+                <dt>{t('Venue split')}</dt>
+                <dd>{t('{client} client · {exchange} exchange', { client: stats.clientFills, exchange: stats.exchangeFills })}</dd>
+              </div>
+              <div>
+                <dt>{t('Spread capture')}</dt>
+                <dd className={stats.spreadCapture < 0 ? 'num--down' : 'num--up'}>
+                  {signedMoney(stats.spreadCapture)}
+                </dd>
+              </div>
+              <div>
                 <dt>{t('Hit ratio above mid')}</dt>
                 <dd>{pct(stats.winRate)}</dd>
               </div>

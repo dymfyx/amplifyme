@@ -2,6 +2,9 @@ export type Role = 'sales' | 'market-maker'
 
 export type Side = 'BUY' | 'SELL'
 
+/** 成交来源：客户流（我们报价/成交客户单） vs 自己在交易所主动吃单 */
+export type Venue = 'client' | 'exchange'
+
 export interface Instrument {
   symbol: string
   name: string
@@ -30,6 +33,7 @@ export interface OrderRow {
   qty: number
   price: number
   status: 'WORKING' | 'FILLED' | 'CANCELLED'
+  venue: Venue
 }
 
 export interface TradeRow {
@@ -40,6 +44,7 @@ export interface TradeRow {
   qty: number
   price: number
   fee: number
+  venue: Venue
 }
 
 export type NewsKind = 'macro' | 'note' | 'equity'

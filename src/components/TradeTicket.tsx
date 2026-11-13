@@ -335,6 +335,7 @@ export default function TradeTicket({
                 <tr>
                   <th scope="col">{t('TIME')}</th>
                   <th scope="col">{t('SECURITY')}</th>
+                  <th scope="col">{t('VENUE')}</th>
                   <th scope="col">{t('SIDE')}</th>
                   <th scope="col" className="num">{t('QTY')}</th>
                   <th scope="col" className="num">{t('PRICE')}</th>
@@ -347,6 +348,11 @@ export default function TradeTicket({
                   <tr key={fill.id} className="row">
                     <td className="muted">{fill.time}</td>
                     <td className="strong">{fill.symbol}</td>
+                    <td>
+                      <span className={`badge badge--${fill.venue}`}>
+                        {t(fill.venue === 'client' ? 'CLIENT' : 'EXCHANGE')}
+                      </span>
+                    </td>
                     <td className={fill.side === 'BUY' ? 'num--up' : 'num--down'}>{t(fill.side)}</td>
                     <td className="num">{fill.qty.toLocaleString('en-US')}</td>
                     <td className="num">{fill.price.toFixed(2)}</td>
@@ -356,7 +362,7 @@ export default function TradeTicket({
                 ))}
                 {recentFills.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="empty">
+                    <td colSpan={8} className="empty">
                       {t('No fills yet — the first client order will land here')}
                     </td>
                   </tr>

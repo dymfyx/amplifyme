@@ -28,7 +28,7 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
 
   return (
     <section className="panel panel--positions">
-      <PanelHeader index="6" title={t('BOOK')} />
+      <PanelHeader index="7" title={t('BOOK')} />
       <div className="tabs">
         {tabs.map((item) => (
           <button
@@ -131,6 +131,7 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
                 <th scope="col">{t('ID')}</th>
                 <th scope="col">{t('TIME')}</th>
                 <th scope="col">{t('SECURITY')}</th>
+                <th scope="col">{t('VENUE')}</th>
                 <th scope="col">{t('SIDE')}</th>
                 <th scope="col" className="num">{t('QTY')}</th>
                 <th scope="col" className="num">{t('PRICE')}</th>
@@ -140,7 +141,7 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
             <tbody>
               {trades.length === 0 && (
                 <tr>
-                  <td className="empty" colSpan={7}>
+                  <td className="empty" colSpan={8}>
                     {t('No fills yet in this session')}
                   </td>
                 </tr>
@@ -150,6 +151,11 @@ export default function PositionsPanel({ positions, orders, trades }: PositionsP
                   <td className="muted">{trade.id}</td>
                   <td className="muted">{trade.time}</td>
                   <td className="strong">{trade.symbol}</td>
+                  <td>
+                    <span className={`badge badge--${trade.venue}`}>
+                      {t(trade.venue === 'client' ? 'CLIENT' : 'EXCHANGE')}
+                    </span>
+                  </td>
                   <td className={trade.side === 'BUY' ? 'side side--buy' : 'side side--sell'}>{t(trade.side)}</td>
                   <td className="num">{trade.qty.toLocaleString('en-US')}</td>
                   <td className="num">{trade.price.toFixed(2)}</td>

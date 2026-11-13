@@ -14,7 +14,7 @@ export default function PriceTape({ changes, selected, onSelect }: PriceTapeProp
   return (
     <section className="panel panel--tape">
       <PanelHeader
-        index="7"
+        index="8"
         title={t('PRICE TAPE')}
         right={<span className="panel__meta">{t('WHY IT MOVED')}</span>}
       />

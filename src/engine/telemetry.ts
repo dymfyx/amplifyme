@@ -1,4 +1,4 @@
-import type { Side } from '../types'
+import type { Side, Venue } from '../types'
 
 /**
  * 决策遥测：把玩家在台面上做过的事情记成事件流，供评分和结算报告使用。
@@ -38,6 +38,8 @@ export interface FillRecord {
   notional: number
   fee: number
   tick: number
+  /** 成交来源：客户流 or 自己在交易所吃单 */
+  venue: Venue
 }
 
 export interface ExposureSample {

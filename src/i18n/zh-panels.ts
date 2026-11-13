@@ -111,4 +111,25 @@ export const zhPanels: Record<string, string> = {
   'WHY IT MOVED': '异动原因',
   'Open {symbol} from the price tape': '从价格带打开 {symbol}',
   'Waiting for the market to move…': '等待行情启动…',
+
+  // 交易所（主动成交）票据
+  EXCHANGE: '交易所',
+  'TAKE LIQUIDITY': '主动成交',
+  'Exchange side': '交易所方向',
+  'Exchange BUY': '交易所买入',
+  'Exchange SELL': '交易所卖出',
+  'Exchange quantity': '交易所数量',
+  'Best price': '最优价',
+  'Est. avg price': '预估均价',
+  'BOOK SIZE': '盘口可成交量',
+  'Shares available on the visible book for this side': '当前盘口这一侧可成交的股数',
+  'BUY AT MARKET': '市价买入',
+  'SELL AT MARKET': '市价卖出',
+
+  // 成交来源
+  VENUE: '来源',
+  CLIENT: '客户',
+  'Venue split': '成交来源',
+  '{client} client · {exchange} exchange': '客户 {client} 笔 · 交易所 {exchange} 笔',
+  'Spread capture': '价差捕获',
 }

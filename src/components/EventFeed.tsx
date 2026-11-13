@@ -19,7 +19,7 @@ export default function EventFeed({ news }: EventFeedProps) {
   return (
     <section className="panel panel--events">
       <PanelHeader
-        index="8"
+        index="9"
         title={t('EVENT FEED')}
         right={
           <span className="badge badge--live">

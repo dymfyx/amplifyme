@@ -484,6 +484,31 @@ function bookOf(instruments: InstrumentState[], symbol: string): Book {
   return instruments.find((item) => item.symbol === symbol)?.book ?? { bids: [], asks: [] }
 }
 
+/** 盘口某一侧的总挂单量 —— 也就是「交易所现在最多能成交多少股」 */
+export function exchangeLiquidity(levels: BookLevel[]): number {
+  return levels.reduce((total, level) => total + level.size, 0)
+}
+
+/**
+ * 沿盘口逐档吃掉 qty 股：返回加权成交均价和消耗的档数。
+ * 流动性不足时返回 null（调用方决定是拒单还是部分成交）。
+ */
+export function walkBook(levels: BookLevel[], qty: number): { avgPrice: number; levels: number } | null {
+  if (!(qty > 0)) return null
+  let left = qty
+  let notional = 0
+  let used = 0
+  for (const level of levels) {
+    if (left <= 0) break
+    const take = Math.min(left, level.size)
+    notional += take * level.price
+    left -= take
+    used += 1
+  }
+  if (left > 0) return null
+  return { avgPrice: round2(notional / qty), levels: used }
+}
+
 /** 波动率缩放：同一句话对不同名字的影响不同（高波动名字反应更大） */
 const volScale = (sigma: number) => Math.min(1.8, Math.max(0.7, sigma / 0.0018))
 
@@ -774,6 +799,7 @@ export function stepSession(state: SimulationState): SimulationState {
       qty: quote.qty,
       price,
       fee,
+      venue: 'client',
     }
     const filledOrder: OrderRow = {
       id: `ORD-${counters.order}`,
@@ -783,6 +809,7 @@ export function stepSession(state: SimulationState): SimulationState {
       qty: quote.qty,
       price,
       status: 'FILLED',
+      venue: 'client',
     }
     trades = [filledTrade, ...trades].slice(0, 20)
     orders = [filledOrder, ...orders].slice(0, 20)
@@ -798,6 +825,7 @@ export function stepSession(state: SimulationState): SimulationState {
       notional: round2(gross),
       fee,
       tick,
+      venue: 'client',
     })
     if (quote.rfqId) {
       dispatch = dispatch.filter((item) => item.id !== quote.rfqId)
@@ -1045,6 +1073,7 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     qty: input.qty,
     price: round2(input.price),
     status: 'FILLED',
+    venue: 'client',
   }
   const trade: TradeRow = {
     id: `TRD-${counters.trade}`,
@@ -1054,6 +1083,7 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     qty: input.qty,
     price: round2(input.price),
     fee,
+    venue: 'client',
   }
   const mid = bookMid(bookOf(state.instruments, input.symbol))
   const telemetry = recordFill(state.telemetry, {
@@ -1067,6 +1097,7 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     notional: round2(gross),
     fee,
     tick: state.tick,
+    venue: 'client',
   })
   return {
     state: {
@@ -1084,6 +1115,106 @@ export function fillClientOrder(state: SimulationState, input: FillInput): Actio
     message: `FILLED · ${ourSide} ${input.qty.toLocaleString('en-US')} ${input.symbol} @ ${round2(
       input.price,
     ).toFixed(2)} · ${input.client}`,
+  }
+}
+
+export interface ExchangeTradeInput {
+  symbol: string
+  /** 我们的方向：BUY = 主动打卖盘（lift the offer），SELL = 主动砸买盘 */
+  side: Side
+  qty: number
+}
+
+/**
+ * 自己在交易所主动成交（take liquidity）：沿盘口逐档吃，按加权均价成交。
+ *
+ * 和客户流相比：客户流是「你报价、客户决定是否成交」，价格里含你的价差；
+ * 交易所这边没有报价环节，你付出的是市场价差 + 冲击成本，换来立刻到手的库存。
+ * 两条腿价差（客户买/交易所卖，或反过来）就是台面的利润来源。
+ */
+export function tradeOnExchange(state: SimulationState, input: ExchangeTradeInput): ActionResult {
+  const qty = Math.trunc(input.qty)
+  if (!(qty > 0)) return { state, message: 'EXCHANGE REJECTED · quantity must be positive' }
+
+  const instrument = state.instruments.find((item) => item.symbol === input.symbol)
+  if (!instrument) return { state, message: 'EXCHANGE REJECTED · unknown instrument' }
+
+  const levels = input.side === 'BUY' ? instrument.book.asks : instrument.book.bids
+  const liquidity = exchangeLiquidity(levels)
+  if (liquidity <= 0) {
+    const sideLabel = input.side === 'BUY' ? 'offers' : 'bids'
+    return { state, message: `EXCHANGE REJECTED · no ${sideLabel} in ${input.symbol} right now` }
+  }
+  if (qty > liquidity) {
+    const available = liquidity.toLocaleString('en-US')
+    return { state, message: `EXCHANGE REJECTED · only ${available} ${input.symbol} on the book` }
+  }
+
+  const walked = walkBook(levels, qty)
+  if (!walked) return { state, message: 'EXCHANGE REJECTED · not enough liquidity' }
+
+  const price = walked.avgPrice
+  const gross = qty * price
+  const fee = round2(gross * COMMISSION_RATE)
+  if (input.side === 'BUY' && gross + fee > state.cash) {
+    const need = Math.ceil(gross + fee).toLocaleString('en-US')
+    const have = Math.floor(state.cash).toLocaleString('en-US')
+    return { state, message: `EXCHANGE REJECTED · insufficient cash (need $${need}, have $${have})` }
+  }
+
+  const mid = bookMid(instrument.book)
+  const positions = applyPositionFill(state.positions, input.symbol, input.side, qty, price)
+  const instruments = applyFillImpact(state.instruments, input.symbol, input.side, gross, state.tick)
+  const counters = { ...state.counters, trade: state.counters.trade + 1, order: state.counters.order + 1 }
+  const order: OrderRow = {
+    id: `ORD-${counters.order}`,
+    time: formatShortTime(state.simSeconds),
+    symbol: input.symbol,
+    side: input.side,
+    qty,
+    price,
+    status: 'FILLED',
+    venue: 'exchange',
+  }
+  const trade: TradeRow = {
+    id: `TRD-${counters.trade}`,
+    time: formatShortTime(state.simSeconds),
+    symbol: input.symbol,
+    side: input.side,
+    qty,
+    price,
+    fee,
+    venue: 'exchange',
+  }
+  const telemetry = recordFill(state.telemetry, {
+    id: trade.id,
+    symbol: input.symbol,
+    side: input.side,
+    qty,
+    price,
+    mid,
+    edge: round2(input.side === 'BUY' ? mid - price : price - mid),
+    notional: round2(gross),
+    fee,
+    tick: state.tick,
+    venue: 'exchange',
+  })
+
+  return {
+    state: {
+      ...state,
+      positions,
+      instruments,
+      telemetry,
+      commission: round2(state.commission + fee),
+      orders: [order, ...state.orders].slice(0, 20),
+      trades: [trade, ...state.trades].slice(0, 20),
+      cash: round2(state.cash + (input.side === 'BUY' ? -(gross + fee) : gross - fee)),
+      counters,
+    },
+    message: `EXCHANGE FILLED · ${input.side} ${qty.toLocaleString('en-US')} ${input.symbol} @ ${price.toFixed(
+      2,
+    )} · ${walked.levels} LEVEL${walked.levels === 1 ? '' : 'S'}`,
   }
 }
 

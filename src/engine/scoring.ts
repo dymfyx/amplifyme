@@ -48,6 +48,14 @@ export interface SettlementStats {
   avgGross: number
   headlines: number
   headlinesAnswered: number
+  /** 客户流成交笔数（我们报价/接客户单成交） */
+  clientFills: number
+  /** 自己在交易所主动成交笔数 */
+  exchangeFills: number
+  clientNotional: number
+  exchangeNotional: number
+  /** 价差捕获：客户流 edge 金额 + 交易所成交 edge 金额（主动吃单通常为负） */
+  spreadCapture: number
   /** 基准策略（五只股票等权买入并持有）的盈亏，用于结算时对比 */
   benchmarkPnl: number
   /** 基准收益率（%） */
@@ -62,7 +70,15 @@ export function selectSettlement(state: SimulationState): SettlementStats {
   const pnl = selectPnl(state)
   const telemetry = state.telemetry
 
-  const fillEdges = telemetry.fills.map((fill) => fill.edge)
+  /* 客户流成交和交易所主动成交分开统计：前者赚价差，后者付价差 */
+  const clientFills = telemetry.fills.filter((fill) => fill.venue === 'client')
+  const exchangeFills = telemetry.fills.filter((fill) => fill.venue === 'exchange')
+  const fillEdges = clientFills.map((fill) => fill.edge)
+  const clientNotional = clientFills.reduce((total, fill) => total + fill.notional, 0)
+  const exchangeNotional = exchangeFills.reduce((total, fill) => total + fill.notional, 0)
+  const spreadCapture = Math.round(
+    telemetry.fills.reduce((total, fill) => total + fill.edge * fill.qty, 0),
+  )
   const spreadRatios = telemetry.quotes
     .filter((quote) => quote.marketSpread > 0)
     .map((quote) => quote.ourSpread / quote.marketSpread)
@@ -93,6 +109,11 @@ export function selectSettlement(state: SimulationState): SettlementStats {
     avgGross: Math.round(mean(grossSamples)),
     headlines: telemetry.news.length,
     headlinesAnswered: telemetry.news.filter((item) => item.traded).length,
+    clientFills: clientFills.length,
+    exchangeFills: exchangeFills.length,
+    clientNotional: Math.round(clientNotional),
+    exchangeNotional: Math.round(exchangeNotional),
+    spreadCapture,
     ...benchmark(state),
   }
 }

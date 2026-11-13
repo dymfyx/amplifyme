@@ -71,7 +71,7 @@ describe('opening book', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open the Sales desk' }))
     expect(screen.queryByText('Flat — no open positions in this session')).not.toBeInTheDocument()
     expect(screen.getByText('196.80')).toBeInTheDocument()
-    expect(screen.getByText('$20,000,000.00')).toBeInTheDocument()
+    expect(screen.getAllByText('$20,000,000.00').length).toBeGreaterThan(0)
   })
 
   it('re-applies the configured opening book on restart', () => {
@@ -144,7 +144,7 @@ describe('terminal shell', () => {
 
   it('shows the cash budget for the desk', () => {
     openDesk('Sales')
-    expect(screen.getByText('AVAILABLE CASH')).toBeInTheDocument()
+    expect(screen.getAllByText('AVAILABLE CASH').length).toBeGreaterThan(0)
     expect(screen.getByText('CASH')).toBeInTheDocument()
   })
 
@@ -307,7 +307,7 @@ describe('tickets', () => {
     expect(screen.getByText('SIM 09:30:00')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /POSITIONS/ }))
     expect(screen.getByText('Flat — no open positions in this session')).toBeInTheDocument()
-    expect(screen.getByText('$20,000,000.00')).toBeInTheDocument()
+    expect(screen.getAllByText('$20,000,000.00').length).toBeGreaterThan(0)
   })
 })
 
@@ -397,5 +397,43 @@ describe('session end', () => {
     expect(screen.getByRole('heading', { name: 'Settlement report' })).toBeInTheDocument()
     expect(screen.getByText(/BENCHMARK · BUY & HOLD/)).toBeInTheDocument()
     expect(screen.getByText(/ALPHA VS BENCHMARK/)).toBeInTheDocument()
+  })
+})
+
+describe('exchange trading', () => {
+  it('shows a separate exchange ticket next to the client flow', () => {
+    openDesk('Market Maker')
+    expect(screen.getByRole('heading', { name: 'EXCHANGE' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Exchange quantity')).toHaveValue('1000')
+    expect(screen.getByRole('button', { name: 'BUY AT MARKET' })).toBeEnabled()
+    expect(screen.getByText('BOOK SIZE')).toBeInTheDocument()
+  })
+
+  it('takes liquidity at the market and tags the fill as an exchange trade', () => {
+    openDesk('Market Maker')
+    fireEvent.change(screen.getByLabelText('Exchange quantity'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'BUY AT MARKET' }))
+    expect(screen.getByText(/EXCHANGE FILLED · BUY 100 AZN/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /TRADES/ }))
+    // 面板标题也是一个 EXCHANGE，所以至少两处：标题 + 成交行的来源徽标
+    expect(screen.getAllByText('EXCHANGE').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('tags client fills with the client venue', () => {
+    openDesk('Sales')
+    fireEvent.click(screen.getByRole('button', { name: 'FILL CLIENT ORDER' }))
+    expect(screen.getAllByText('CLIENT').length).toBeGreaterThan(0)
+  })
+
+  it('translates the exchange ticket when the desk runs in Chinese', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Chinese' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start as Market Maker' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the Market Maker desk' }))
+    expect(screen.getByRole('heading', { name: '交易所' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '市价买入' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^成交/ }))
+    expect(screen.getByText('来源')).toBeInTheDocument()
   })
 })

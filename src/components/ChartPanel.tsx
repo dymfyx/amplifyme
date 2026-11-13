@@ -74,7 +74,7 @@ export default function ChartPanel({ instrument, series, markers, simSecondsPerT
   return (
     <section className="panel panel--chart">
       <PanelHeader
-        index="5"
+        index="6"
         title={t('CHARTS')}
         right={
           <div className="chart-ranges" role="group" aria-label="Chart range">

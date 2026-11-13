@@ -142,6 +142,25 @@ The desk starts with **$20,000,000** of cash (`STARTING_CASH`, shown as `CASH` i
 - a bid the desk could not settle is rejected too (`QUOTE REJECTED · buying N would exceed the cash budget`),
 - sells credit cash, so the desk can trade its way back out of a tight book.
 
+## Client flow vs the exchange
+
+You can make a price two ways, and every fill is tagged with its venue in the blotter and the settlement report.
+
+| Path | How you trade | What it costs you |
+|---|---|---|
+| `client` | a dispatched RFQ or client order is priced against your own quote and fills at *your* price | you earn the spread versus mid (edge > 0), but only if the client accepts |
+| `exchange` | the `EXCHANGE` ticket takes liquidity from the visible book, sweeping levels | you pay the market spread plus your own impact (edge < 0 straight away) |
+
+The exchange ticket prices the sweep for you: `Best price`, `Est. avg price` across the levels it would consume,
+`BOOK SIZE` (shares available on that side of the visible book), `NOTIONAL` and `COMMISSION`. Clips bigger than
+the book are rejected (`EXCHANGE REJECTED · only … on the book`), and buys are checked against the cash budget.
+
+The two legs are the classic bid-offer loop: buy from a client below mid, sell on the exchange above it (or buy
+on the exchange to cover a short), and keep the difference. `Spread capture` in the settlement report is exactly
+that number in dollars — positive means the edge earned on client flow covered the cost of crossing the exchange.
+The report also splits `Fills` into `Venue split` (client vs exchange), and `Hit ratio above mid` / `Avg edge…`
+only count client flow, so crossing the exchange never flatters your quoting quality.
+
 ## Scoring and settlement
 
 Nothing here is mock data any more. Every quote, fill, decline and headline writes a record into
@@ -238,6 +257,7 @@ src/
     BookPanel.tsx       depth ladder with spread
     DispatchPanel.tsx   system-dispatched RFQs -> ticket
     TradeTicket.tsx     role-aware quote / order ticket + quote tabs
+    ExchangeTicket.tsx  take liquidity from the book: sweep pricing, book size, commission
     ChartPanel.tsx      SVG price chart with event markers and volume
     PositionsPanel.tsx  BOOK tabs: positions / orders / trades
     PriceTape.tsx       why each price moved: drivers per update, click to load
@@ -262,7 +282,7 @@ docs/beginner-guide.pdf  Chinese beginner guide (screenshots, playbook, FAQ)
 
 ## Status
 
-**P2 complete** — live clock, event-driven tape, quote/order fills, cash settlement and mark-to-market P&L all
+**P2.9 complete** — live clock, event-driven tape, client and exchange fills, cash settlement and mark-to-market P&L all
 run off the simulation engine, and the scorecard plus end-of-session report are computed from the decision
 telemetry (no placeholder numbers left in the app). The site builds to plain static files: GitHub Pages,
 Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-link)).
@@ -275,6 +295,8 @@ Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-l
 | P2.5 (done) | Event-driven prices with named drivers, PRICE TAPE panel, static hosting / single-file build |
 | P2.6 (done) | Pinned-seed share links (?seed=), GitHub Pages deployment |
 | P2.7 (done) | EN/中文 UI, 5/15/30-minute tiers with a live countdown and auto-settlement, buy-and-hold benchmark |
+| P2.8 (done) | Fill impact on the tape, quote width -> fill probability (EST. FILL), Chinese beginner guide PDF |
+| P2.9 (done) | Two venues: client flow vs exchange take-liquidity, VENUE tags, spread capture in the report |
 | P3 | Polish: replay, sounds, resizable panels, session save/restore |
 
 ## Working rules
