@@ -4,6 +4,7 @@ import { zhArchive } from './i18n/zh-archive'
 import { zhChrome } from './i18n/zh-chrome'
 import { zhData } from './i18n/zh-data'
 import { zhEval } from './i18n/zh-eval'
+import { zhNews } from './i18n/zh-news'
 import { zhPanels } from './i18n/zh-panels'
 import { zhReplay } from './i18n/zh-replay'
 import { zhScenario } from './i18n/zh-scenario'
@@ -12,6 +13,7 @@ import { zhClosures } from './i18n/zh-closures'
 import { zhProgress } from './i18n/zh-progress'
 import { zhGhost } from './i18n/zh-ghost'
 import { zhLeaderboard } from './i18n/zh-leaderboard'
+import { NEWS_SHORT_ZH } from './engine/news/index'
 
 export type Language = 'en' | 'zh'
 
@@ -38,6 +40,9 @@ const ZH: Record<string, string> = {
   ...zhGhost,
   ...zhLeaderboard,
   ...zhEval,
+  ...zhNews,
+  // 新闻池里的短标签（英文 short → 中文），放在最后，避免被别的字典覆盖
+  ...NEWS_SHORT_ZH,
 }
 
 export type Translate = (text: string, vars?: Record<string, string | number>) => string

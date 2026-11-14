@@ -64,4 +64,29 @@ export const zhTrain: Record<string, string> = {
     '接下客户流并在交易所对冲：至少对冲 80% 的客户名义金额，同时赚取价差。',
   'Client notional hedged on exchange': '交易所对冲的客户名义金额占比',
   'Spread capture': '价差收益',
+  // Drill 6 · Work the book
+  'Work the book': '挂单建仓',
+  'Stop taking every price: rest at least two limit orders and get one of them filled.':
+    '别见价就吃：至少挂出两笔限价单，并让其中一笔成交。',
+  'Working orders placed': '挂出的挂单数',
+  'Resting fills': '挂单成交笔数',
+
+  // Drill 7 · Goal keeper
+  'Goal keeper': '守门员',
+  'Keep quoting through a central-bank day, but never let a single name run past 800 shares.':
+    '央行决议日持续报价，但任何单一标的持仓都不要超过 800 股。',
+  // Drill 8 · Hedge the book
+  'Hedge the book': '给库存对冲',
+  'You inherit long NFLX into an earnings tape: take at least one exchange fill and still beat buy & hold.':
+    '你在财报行情里继承了 NFLX 多头：至少完成一笔交易所成交，并且仍跑赢买入持有。',
+  'Exchange fills': '交易所成交笔数',
+
+  // Drill 9 · Opaque headlines
+  'Opaque headlines': '含糊头条',
+  'No direction labels at this tier: trade at least two opaque headlines and get run over at most twice.':
+    '这一档不标注方向：至少对两条含糊头条动手，同时被套最多两次。',
+  // Drill 10 · Risk discipline
+  'Risk discipline': '风险纪律',
+  'A funding scare with a tight mandate: keep every name under 500 shares and get run over at most once.':
+    '融资恐慌 + 严格权限：每个标的持仓不超过 500 股，且最多只被套一次。',
 }

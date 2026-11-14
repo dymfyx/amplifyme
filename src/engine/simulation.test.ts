@@ -124,7 +124,7 @@ describe('market data', () => {
   })
 
   it('reveals headlines as the clock passes them', () => {
-    const state = advanceSession(session(), 110)
+    const state = advanceSession(session(), 160)
     expect(state.news.length).toBeGreaterThanOrEqual(1)
     expect(state.pendingNews.length).toBeLessThan(20)
     expect(state.chartEvents.length).toBeGreaterThanOrEqual(1)

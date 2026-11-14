@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import type { Role } from '../types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { NewsItem, Role } from '../types'
 import {
   DEFAULT_MINUTES,
   STARTING_CASH,
@@ -63,6 +63,7 @@ import BookPanel from '../components/BookPanel'
 import DealerQuotePanel from '../components/DealerQuotePanel'
 import DispatchPanel from '../components/DispatchPanel'
 import EventFeed from '../components/EventFeed'
+import NewsDetail from '../components/NewsDetail'
 import ExchangeTicket from '../components/ExchangeTicket'
 import MarketWatch from '../components/MarketWatch'
 import PriceTape from '../components/PriceTape'
@@ -136,14 +137,22 @@ export default function Terminal({
   const [reportDismissed, setReportDismissed] = useState(false)
   const [ghost, setGhost] = useState<GhostSession | null>(() => readGhost())
   const [ghostOpen, setGhostOpen] = useState(false)
+  const [newsDetail, setNewsDetail] = useState<NewsItem | null>(null)
 
   const instruments = selectInstruments(state)
   const instrument = instruments.find((item) => item.symbol === selected) ?? instruments[0]
   const positions = selectPositions(state)
   const pnl = selectPnl(state)
   const book = selectBook(state, selected)
-  const series = selectSeries(state, selected)
-  const markers = selectChartMarkers(state, selected)
+  /* 图表按每 3 个 tick 换一次数据：4x 下从 16 次/秒降到约 5 次/秒，肉眼仍是连续跳动 */
+  const chartBucket = Math.floor(state.tick / 3)
+  const chart = useMemo(
+    () => ({ series: selectSeries(state, selected), markers: selectChartMarkers(state, selected) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartBucket, selected, state.seed],
+  )
+  const series = chart.series
+  const markers = chart.markers
   const drivers = selectDrivers(state)
   const tape = selectPriceTape(state)
   const rfqs = state.dispatch
@@ -457,7 +466,11 @@ export default function Terminal({
 
         <aside className="rail rail--right">
           <PriceTape changes={tape} selected={selected} onSelect={setSelected} />
-          <EventFeed news={state.news} />
+          <EventFeed
+          news={state.news}
+          hideDirection={tier.hideNewsDirection}
+          onOpenNews={(item) => setNewsDetail(item)}
+        />
           <button
             type="button"
             className="score-teaser"
@@ -477,6 +490,14 @@ export default function Terminal({
 
       {flowOpen ? <ParticipantsDrawer agents={agents} onClose={() => setFlowOpen(false)} /> : null}
       {scoreOpen ? <ScoreDrawer score={score} onClose={() => setScoreOpen(false)} /> : null}
+      {newsDetail ? (
+        <NewsDetail
+          item={newsDetail}
+          hideDirection={tier.hideNewsDirection}
+          onClose={() => setNewsDetail(null)}
+        />
+      ) : null}
+
       {replayOpen ? (
         <ReplayDrawer
           frames={history.map((frame) => ({ tick: frame.tick, time: frame.time, prices: frame.prices }))}

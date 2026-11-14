@@ -11,6 +11,11 @@ export type DrillId =
   | 'inventory-control'
   | 'adverse-selection'
   | 'two-venues'
+  | 'limit-build'
+  | 'goal-keeper'
+  | 'hedge-the-book'
+  | 'vague-news'
+  | 'risk-discipline'
 
 export type MetricUnit = 'count' | 'percent' | 'shares' | 'dollars' | 'ratio'
 
@@ -136,6 +141,81 @@ export const DRILLS: Drill[] = [
       { id: 'alpha', label: 'Alpha vs buy & hold', compare: 'gt', target: 0, unit: 'dollars' },
     ],
   },
+  {
+    id: 'limit-build',
+    name: 'Work the book',
+    blurb: 'Stop taking every price: rest at least two limit orders and get one of them filled.',
+    role: 'sales',
+    minutes: 5,
+    seed: 6601,
+    scenarioId: 'classic',
+    tier: 2,
+    openingBook: [],
+    criteria: [
+      { id: 'restingPlaced', label: 'Working orders placed', compare: 'gte', target: 2, unit: 'count' },
+      { id: 'restingFilled', label: 'Resting fills', compare: 'gte', target: 1, unit: 'count' },
+    ],
+  },
+  {
+    id: 'goal-keeper',
+    name: 'Goal keeper',
+    blurb: 'Keep quoting through a central-bank day, but never let a single name run past 800 shares.',
+    role: 'market-maker',
+    minutes: 5,
+    seed: 7703,
+    scenarioId: 'fomc',
+    tier: 2,
+    openingBook: [],
+    criteria: [
+      { id: 'quotes', label: 'Quotes sent', compare: 'gte', target: 6, unit: 'count' },
+      { id: 'maxPosition', label: 'Largest position at close', compare: 'lte', target: 800, unit: 'shares' },
+    ],
+  },
+  {
+    id: 'hedge-the-book',
+    name: 'Hedge the book',
+    blurb: 'You inherit long NFLX into an earnings tape: take at least one exchange fill and still beat buy & hold.',
+    role: 'sales',
+    minutes: 5,
+    seed: 8807,
+    scenarioId: 'earnings',
+    tier: 2,
+    openingBook: [{ symbol: 'NFLX', netQty: 800, avgPrice: 537.5 }],
+    criteria: [
+      { id: 'exchange', label: 'Exchange fills', compare: 'gte', target: 1, unit: 'count' },
+      { id: 'alpha', label: 'Alpha vs buy & hold', compare: 'gt', target: 0, unit: 'dollars' },
+    ],
+  },
+  {
+    id: 'vague-news',
+    name: 'Opaque headlines',
+    blurb: 'No direction labels at this tier: trade at least two opaque headlines and get run over at most twice.',
+    role: 'market-maker',
+    minutes: 5,
+    seed: 9901,
+    scenarioId: 'geopolitics',
+    tier: 4,
+    openingBook: [],
+    criteria: [
+      { id: 'headlines', label: 'Headlines traded', compare: 'gte', target: 2, unit: 'count' },
+      { id: 'pickedOff', label: 'Fills run over', compare: 'lte', target: 2, unit: 'count' },
+    ],
+  },
+  {
+    id: 'risk-discipline',
+    name: 'Risk discipline',
+    blurb: 'A funding scare with a tight mandate: keep every name under 500 shares and get run over at most once.',
+    role: 'market-maker',
+    minutes: 5,
+    seed: 1103,
+    scenarioId: 'credit',
+    tier: 3,
+    openingBook: [],
+    criteria: [
+      { id: 'maxPosition', label: 'Largest position at close', compare: 'lte', target: 500, unit: 'shares' },
+      { id: 'pickedOff', label: 'Fills run over', compare: 'lte', target: 1, unit: 'count' },
+    ],
+  },
 ]
 
 export const drillById = (id: string): Drill | null =>
@@ -176,6 +256,7 @@ export const drillMetrics = (drill: Drill, state: SimulationState): DrillMetric[
     0,
   )
 
+  const restingOrders = state.restingOrders
   const values: Record<string, number> = {
     quotes: quotes.length,
     tight: quotes.length === 0 ? 0 : tightQuotes / quotes.length,
@@ -185,6 +266,9 @@ export const drillMetrics = (drill: Drill, state: SimulationState): DrillMetric[
     pickedOff: review.adverse.length,
     alpha: stats.alpha,
     dealer: stats.dealerFills,
+    exchange: stats.exchangeFills,
+    restingPlaced: state.counters.resting,
+    restingFilled: restingOrders.filter((order) => order.status === 'FILLED').length,
   }
 
   return drill.criteria.map((criterion) => {

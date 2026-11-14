@@ -9,6 +9,8 @@ import DrillPicker from '../components/DrillPicker'
 import { DRILLS, type DrillId } from '../train/drills'
 import type { DrillRecords } from '../train/records'
 import CustomScenarioModal from '../components/CustomScenarioModal'
+import HomeLeaderboard from '../components/HomeLeaderboard'
+import type { ArchivedSession } from '../storage/archive'
 
 interface RoleOption {
   id: Role
@@ -69,6 +71,8 @@ interface RoleSelectProps {
   onOpenArchive: () => void
   /** 打开跨局趋势面板 */
   onOpenProgress: () => void
+  /** 本地存档（首页历史榜用） */
+  sessions: ArchivedSession[]
   onSelect: (role: Role) => void
 }
 
@@ -88,6 +92,7 @@ export default function RoleSelect({
   archiveCount,
   onOpenArchive,
   onOpenProgress,
+  sessions,
   onSelect,
 }: RoleSelectProps) {
   const t = useT()
@@ -228,6 +233,8 @@ export default function RoleSelect({
             </div>
           </>
         )}
+
+        <HomeLeaderboard sessions={sessions} onOpenArchive={onOpenArchive} />
 
         <footer className="role-select__footer">
           <span>{t('SCENARIO · REAL-WORLD EVENT REPLAY')}</span>

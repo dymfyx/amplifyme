@@ -79,7 +79,10 @@ export default function LeaderboardCard({ session, history, desk }: LeaderboardC
               <span>{t('RETURN')}</span>
               <span>{t('P&L')}</span>
             </div>
-            {session.entries.slice(0, 12).map((entry, index) => (
+            {[
+              ...session.entries.slice(0, 12),
+              ...session.entries.slice(12).filter((entry) => entry.isYou),
+            ].map((entry, index) => (
               <div
                 key={entry.id}
                 className={entry.isYou ? 'leaderboard__row leaderboard__row--you' : 'leaderboard__row'}

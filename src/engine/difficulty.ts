@@ -85,6 +85,8 @@ export interface DifficultyTier {
   widthPenalty: number
   /** EST. FILL 展示抖动（0 = 精确） */
   estFillJitter: number
+  /** 是否隐藏新闻的利好/利空标注：三、四档让玩家自己判断方向 */
+  hideNewsDirection: boolean
 }
 
 const BASE: Omit<DifficultyTier, 'id' | 'role' | 'name' | 'blurb'> = {
@@ -118,6 +120,7 @@ const BASE: Omit<DifficultyTier, 'id' | 'role' | 'name' | 'blurb'> = {
   queueDecayMult: 1,
   widthPenalty: 1,
   estFillJitter: 0,
+  hideNewsDirection: false,
 }
 
 export const SALES_TIERS: DifficultyTier[] = [
@@ -152,6 +155,7 @@ export const SALES_TIERS: DifficultyTier[] = [
     id: 3,
     role: 'sales',
     name: 'Venture desk',
+    hideNewsDirection: true,
     blurb: 'Dealers are slower and pickier, and headlines bite harder.',
     commissionRate: 0.00065,
     newsVolMult: 1.25,
@@ -175,6 +179,7 @@ export const SALES_TIERS: DifficultyTier[] = [
     id: 4,
     role: 'sales',
     name: 'Black-swan fund',
+    hideNewsDirection: true,
     blurb: 'Two dealers, short fuses, and the market can drain on you.',
     commissionRate: 0.0008,
     newsVolMult: 1.6,
@@ -232,6 +237,7 @@ export const MAKER_TIERS: DifficultyTier[] = [
     id: 3,
     role: 'market-maker',
     name: 'Private fund',
+    hideNewsDirection: true,
     blurb: 'Faster flow, sharper customers, and the tape fights back.',
     commissionRate: 0.00065,
     newsVolMult: 1.25,
@@ -258,6 +264,7 @@ export const MAKER_TIERS: DifficultyTier[] = [
     id: 4,
     role: 'market-maker',
     name: 'Jiangyi fund',
+    hideNewsDirection: true,
     blurb: 'Big size, predatory flow, and a mandate that only lets you cut risk.',
     commissionRate: 0.0008,
     newsVolMult: 1.6,

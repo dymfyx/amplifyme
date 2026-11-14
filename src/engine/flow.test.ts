@@ -11,6 +11,7 @@ import {
 } from './simulation'
 import { decisionReview, selectSettlement } from './scoring'
 import { SCENARIOS, parseScenarioJson, EXAMPLE_SCENARIO_JSON, scenarioById } from './scenarios'
+import { scheduleNews } from './news'
 
 const session = (seed = 20261112): SimulationState => createSession(seed)
 
@@ -43,7 +44,10 @@ describe('event flow and client profiles', () => {
     const parsed = parseScenarioJson(EXAMPLE_SCENARIO_JSON)
     expect(parsed.error).toBeUndefined()
     expect(parsed.scenario?.news.length).toBeGreaterThan(0)
-    expect(parsed.scenario?.news.every((item) => item.at >= 0 && item.at <= 1)).toBe(true)
+    expect(parsed.scenario?.newsCount ?? 0).toBeGreaterThan(0)
+    const scheduled = scheduleNews(parsed.scenario?.news ?? [], 7, 3)
+    expect(scheduled).toHaveLength(3)
+    expect(scheduled.every((item) => item.at >= 0 && item.at <= 1)).toBe(true)
 
     expect(parseScenarioJson('not json').error).toContain('JSON')
     const badSymbol = JSON.stringify({
@@ -54,20 +58,23 @@ describe('event flow and client profiles', () => {
   })
 
   it('sends informed clients in the direction of a fresh headline', () => {
-    const state = withHeadline(4242)
-    const hot = Object.entries(state.newsBias)
-      .filter(([, value]) => Math.abs(value) >= 8)
-      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    expect(hot.length).toBeGreaterThan(0)
-    const informed = state.dispatch.filter((rfq) => rfq.note.length > 0)
-    expect(informed.length).toBeGreaterThan(0)
+    let state = withHeadline(4242)
     const profileIds = state.clients.filter((client) => client.type === 'informed').map((client) => client.id)
-    const fromInformed = state.dispatch.filter((rfq) => profileIds.includes(rfq.client))
-    expect(fromInformed.length).toBeGreaterThan(0)
-    /* 消息灵通的客户顺着新闻做：他们的单子只会出现在「有热度」的名字上 */
-    for (const rfq of fromInformed) {
-      expect(Math.abs(state.newsBias[rfq.symbol] ?? 0)).toBeGreaterThanOrEqual(8)
+    let seen = 0
+    const known = new Set(state.dispatch.map((item) => item.id))
+    /* 回价、派单都有节奏：在一段有热度的窗口里多走几帧，只检查新出现的单子 */
+    for (let index = 0; index < 600 && seen === 0; index += 1) {
+      state = advanceSession(state, 1)
+      for (const rfq of state.dispatch.filter(
+        (item) => profileIds.includes(item.client) && !known.has(item.id),
+      )) {
+        /* 消息灵通的客户顺着新闻做：刚下单时那个名字必须有热度 */
+        expect(Math.abs(state.newsBias[rfq.symbol] ?? 0)).toBeGreaterThanOrEqual(8)
+        seen += 1
+      }
+      for (const item of state.dispatch) known.add(item.id)
     }
+    expect(seen).toBeGreaterThan(0)
   })
 
   it('keeps the client heat as a memory and cools it down over time', () => {
@@ -166,14 +173,17 @@ describe('event flow and client profiles', () => {
     expect(settlement.trades).toBe(state.telemetry.fills.length)
   })
 
-  it('ships a library of five scenarios with a stable default', () => {
-    expect(SCENARIOS.length).toBeGreaterThanOrEqual(5)
+  it('ships a library of ten scenarios with a stable default', () => {
+    expect(SCENARIOS.length).toBeGreaterThanOrEqual(10)
     const ids = SCENARIOS.map((scenario) => scenario.id)
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids[0]).toBe('classic')
     for (const scenario of SCENARIOS) {
       expect(scenario.news.length).toBeGreaterThan(0)
-      for (const item of scenario.news) {
+      expect(scenario.newsCount).toBeGreaterThan(0)
+      const scheduled = scheduleNews(scenario.news, 11, Math.min(scenario.newsCount, scenario.news.length))
+      expect(scheduled.length).toBeGreaterThan(0)
+      for (const item of scheduled) {
         expect(item.at).toBeGreaterThanOrEqual(0)
         expect(item.at).toBeLessThanOrEqual(1)
       }

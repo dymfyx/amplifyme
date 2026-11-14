@@ -1,0 +1,231 @@
+import type { NewsPool } from '../news'
+
+/**
+ * Earnings：单只股票的业绩日。
+ * NFLX / TSLA / AZN / DUOL 各给一组镜头：盘前沉默、数字读出、电话会与指引、评级变动、尾盘。
+ * 标题只给视角，不替玩家回答方向。
+ */
+export const earningsNews: NewsPool = [
+  {
+    id: 'EA1',
+    kind: 'note',
+    tag: 'NOTE',
+    impact: 2,
+    short: { en: 'pre-market', zh: '盘前静默' },
+    headline: {
+      en: 'The four names on the calendar go quiet before the bell',
+      zh: '今天日历上的四只票，开盘前都安静下来',
+    },
+    detail: {
+      en: 'Pre-market volume in the four reporters is running at a fifth of a normal session, and the chat is unusually free of colour. Options are pricing an 8% move for Netflix, 7% for Tesla, 4% for AstraZeneca and 11% for Duolingo, all a touch above their four-quarter averages. Whisper numbers have circulated since Friday, and at least two desks published no-view notes rather than risk a call.',
+      zh: '四家要发财报的公司，盘前成交量只有平时的五分之一，群里也少见地没什么消息。期权市场给奈飞定价 8% 的波动、特斯拉 7%、阿斯利康 4%、多邻国 11%，都略高于各自过去四个季度的均值。卖方的耳语数字从上周五就开始传，至少两家台干脆发了无观点报告，不想冒险给方向。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'EA2',
+    kind: 'equity',
+    tag: 'NFLX',
+    impact: 3,
+    symbol: 'NFLX',
+    direction: 1,
+    driftBps: 115,
+    short: { en: 'subscriber line', zh: '订阅数' },
+    headline: {
+      en: 'The Netflix subscriber line comes back with the ad tier attached',
+      zh: '奈飞的订阅数回来了，后面跟着广告套餐',
+    },
+    detail: {
+      en: 'The company reported net additions at the upper end of its own guidance range and said the ad-supported tier is now more than a quarter of new sign-ups where it is sold. Revenue per user was flat in the US and lower in Latin America, which is where the argument will be. The letter runs to eleven pages and the Q&A starts at 17:00.',
+      zh: '公司公布净增用户落在自身指引区间的上沿，并称在有广告套餐的市场里，新签约用户中已有超过四分之一选了广告档。美国区每用户收入持平，拉美下滑，这正是接下来要争的地方。股东信一共十一页，电话会问答 17:00 开始。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'EA3',
+    kind: 'equity',
+    tag: 'NFLX',
+    impact: 2,
+    symbol: 'NFLX',
+    direction: -1,
+    driftBps: 90,
+    short: { en: 'content spend', zh: '内容支出' },
+    headline: {
+      en: 'The call spends its time on the content line',
+      zh: '电话会的时间，都花在内容支出那一行',
+    },
+    detail: {
+      en: 'Management guided full-year content spend to the top of the range and said the second half carries the sports rights already announced, without giving a quarterly split. Free cash flow guidance was left alone, which implies the extra spend comes out of the buyback or the margin. Two sell-side analysts pressed twice on the payback period for live rights and never got a number.',
+      zh: '管理层把全年内容支出指引给到了区间上沿，并表示下半年要装下已经宣布的体育版权，但没有给季度拆分。自由现金流指引没有动，这意味着多出来的钱要么从回购里出，要么从利润率里出。两位卖方分析师两次追问直播版权的回收周期，始终没拿到数字。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'EA4',
+    kind: 'equity',
+    tag: 'TSLA',
+    impact: 3,
+    symbol: 'TSLA',
+    direction: -1,
+    driftBps: 130,
+    short: { en: 'auto gross margin', zh: '汽车毛利率' },
+    headline: {
+      en: 'The Tesla margin line arrives with the credits stripped out',
+      zh: '特斯拉的利润率，是在剔除积分之后拿出来的',
+    },
+    detail: {
+      en: 'Automotive gross margin excluding regulatory credits came in below the level the buy-side had modelled, and energy storage was the only segment with a better number than the prior quarter. Management pointed to the ramp of the new model and to lower unit costs in the second half. Deliveries were already known, so the whole debate is now about price per vehicle.',
+      zh: '剔除监管积分后的汽车毛利率低于买方模型的假设，储能是唯一环比数字更好的板块。管理层把重点放在新车型爬产和下半年的单位成本下降上。交付量早已公布，所以现在整场争论只剩下每辆车的价格。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'EA5',
+    kind: 'equity',
+    tag: 'TSLA',
+    impact: 2,
+    symbol: 'TSLA',
+    direction: -1,
+    driftBps: 75,
+    short: { en: 'capex guide', zh: '资本开支' },
+    headline: {
+      en: 'The capex number on the call is the one nobody had in the model',
+      zh: '电话会上的资本开支数字，没人放进了模型',
+    },
+    detail: {
+      en: 'The company lifted the full-year capital expenditure range by a mid-single-digit billion dollar amount and linked most of it to compute for the autonomy programme. Operating cash flow was described as sufficient, but free cash flow now depends on working capital. One analyst noted that the increase lands in the same year as the model changeover and the second factory ramp.',
+      zh: '公司把全年资本开支区间上调了中个位数的十亿美元级别，并把其中大部分和自动驾驶的算力挂在一起。管理层说经营现金流足够，但自由现金流现在要看营运资本的脸色。一位分析师指出，这笔增加正好落在车型换代和第二工厂爬产的同一个年份。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'EA6',
+    kind: 'equity',
+    tag: 'TSLA',
+    impact: 2,
+    symbol: 'TSLA',
+    direction: -1,
+    driftBps: 60,
+    short: { en: 'rating change', zh: '评级变动' },
+    headline: {
+      en: 'Tesla comes off the top of one sell-side list',
+      zh: '特斯拉从一家卖方的首选名单上下来了',
+    },
+    detail: {
+      en: 'The note cuts the rating by one notch and keeps the price target, arguing that the risk-reward has narrowed rather than that the story has broken. It flags the second-half capex step-up and the absence of a volume target for the new model. Two other desks have the stock on review, and options are pricing a wider move than the note alone would justify.',
+      zh: '这份报告下调一档评级，目标价不变，理由是风险收益比变窄了，而不是故事破了。报告点名下半年的资本开支跳升，以及新车型没有给销量目标。另外两家台把这只票放进了观察名单，期权市场定价的波动比单看这份报告应有的幅度更大。',
+    },
+    source: 'broker round',
+  },
+  {
+    id: 'EA7',
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 3,
+    symbol: 'AZN',
+    direction: 1,
+    driftBps: 85,
+    short: { en: 'oncology readout', zh: '肿瘤线' },
+    headline: {
+      en: 'The AstraZeneca oncology line carries the quarter',
+      zh: '这个季度，阿斯利康靠肿瘤线撑住了',
+    },
+    detail: {
+      en: 'Oncology revenue grew at a low-teens rate and the company said its newest lung-cancer drug is now approved in nine major markets. The core operating margin expanded by more than a point, helped by mix and by a one-off manufacturing settlement. Guidance was raised on both revenue and core earnings, with the usual caveat about currency translation at prevailing rates.',
+      zh: '肿瘤业务收入录得低两位数增长，公司称最新的肺癌药已在九个主要市场获批。核心经营利润率扩张超过一个百分点，产品结构和一笔一次性生产和解都有贡献。全年收入和核心盈利指引双双上调，照例附带了按当前汇率折算的保留。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'EA8',
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 2,
+    symbol: 'AZN',
+    direction: 1,
+    driftBps: 55,
+    short: { en: 'guidance range', zh: '指引区间' },
+    headline: {
+      en: 'Guidance is re-cut at both ends of the range',
+      zh: '指引区间的两头，都被重新裁了一次',
+    },
+    detail: {
+      en: 'Revenue guidance was lifted at both the top and the bottom, and the core earnings range moved by the same proportion. Management repeated that the second half is weighted toward the fourth quarter because of launch timing, which leaves room for the number to be trimmed if scripts come in late. The ADR and the London line have traded in lockstep all week, so nothing here looks like local flow.',
+      zh: '收入指引的上沿和下沿一起抬高，核心盈利区间也按同样比例上移。管理层重申下半年业绩更偏向四季度，因为新药上市的时间点在那里，这也意味着如果处方量来得晚，数字还有被下修的空间。ADR 和伦敦现货整周都同步走，看不出本地资金的影响。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'EA9',
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 2,
+    symbol: 'AZN',
+    direction: 1,
+    driftBps: 50,
+    short: { en: 'target review', zh: '目标价' },
+    headline: {
+      en: 'A broker round reworks its AstraZeneca model',
+      zh: '一家经纪商重做了阿斯利康的模型',
+    },
+    detail: {
+      en: 'The note raises its target by roughly 9%, moves the stock to its preferred list and trims the discount rate by 50 basis points, citing launch cadence and a cleaner patent cliff than the sector average. It also argues that the market still capitalises the pipeline at a discount to peers. Our own flow has shown client buying in the name for three sessions.',
+      zh: '报告把目标价上调约 9%，把这只票放进首选名单，并把贴现率下调 50 个基点，理由是上市节奏，以及专利悬崖比板块平均更干净。报告还认为，市场给管线的估值仍低于同业。我们台自己的流水显示，客户在这个名字上已经连买三个交易日。',
+    },
+    source: 'broker round',
+  },
+  {
+    id: 'EA10',
+    kind: 'equity',
+    tag: 'DUOL',
+    impact: 3,
+    symbol: 'DUOL',
+    direction: 1,
+    driftBps: 140,
+    short: { en: 'bookings line', zh: '预订额' },
+    headline: {
+      en: 'The Duolingo bookings line gets the benefit of the doubt',
+      zh: '多邻国这份季报，靠预订额说话',
+    },
+    detail: {
+      en: 'Bookings grew faster than revenue for the third quarter running, and daily active users crossed a threshold the company had set for the year. The top subscription tier is now a double-digit share of subscribers, and management said the marketing ratio would hold rather than fall. Guidance was raised, though the company kept its usual wide range and did not break out the AI cost line.',
+      zh: '预订额连续第三个季度比收入增长更快，日活用户越过了公司自己设定的年度门槛。最高档订阅现在占订阅用户的双位数比例，管理层表示营销费用率会维持、不会下降。指引上调了，但公司照例给了一个很宽的区间，也没有单独披露 AI 成本那一行。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'EA11',
+    kind: 'equity',
+    tag: 'DUOL',
+    impact: 2,
+    symbol: 'DUOL',
+    direction: -1,
+    driftBps: 100,
+    short: { en: 'marketing line', zh: '营销费用' },
+    headline: {
+      en: 'The call keeps returning to the marketing line',
+      zh: '电话会上，问题一次次回到营销费用那一行',
+    },
+    detail: {
+      en: 'Management said the second half would carry a step-up in performance marketing to defend the top of the funnel, and that the adjusted margin would land at the low end of the range as a result. Two analysts asked whether the spend is acquisition or defence, and the answer was both. The CFO also flagged that the tax rate normalises next year.',
+      zh: '管理层表示下半年会加大效果营销的投入，守住漏斗顶端，因此调整后利润率会落在区间的下沿。两位分析师追问这笔钱是拿来拉新还是防守，得到的回答是两者都有。CFO 还提示，明年的税率会回归正常。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'EA12',
+    kind: 'note',
+    tag: 'NOTE',
+    impact: 2,
+    short: { en: 'closing print', zh: '收盘失衡' },
+    headline: {
+      en: 'The closing auction gets the last word on the four prints',
+      zh: '四份财报的最后一句话，交给收盘竞价',
+    },
+    detail: {
+      en: 'The four names are all in the closing auction with imbalances that point in different directions, and two are large enough to matter for the print. Liquidity in the last twenty minutes is below average because several desks have already squared their earnings hedges. The indicative numbers will be revised twice before the freeze, and the desk is not taking the first print at face value.',
+      zh: '四只票都在收盘竞价里带着失衡，方向各不相同，其中两家的量大到足以影响收盘价。最后二十分钟的流动性低于平均，因为几家台已经把财报的对冲平掉了。指示性数字在冻结前还会改两次，台里不打算把第一版当成最终答案。',
+    },
+    source: 'desk note',
+  },
+]

@@ -308,7 +308,12 @@ Netlify, or a single self-contained HTML file (see [Publish a link](#publish-a-l
 | P2.8 (done) | Fill impact on the tape, quote width -> fill probability (EST. FILL), Chinese beginner guide PDF |
 | P2.9 (done) | Exchange take-liquidity with VENUE tags and spread capture in the report |
 | P2.13 (done) | Market maker vs sales semantics: dealer RFQs, role-specific venue pricing, role-specific scoring |
-| P3 | Polish: replay, sounds, resizable panels, session save/restore |
+| P2.14 (done) | Four difficulty tiers per desk, mandate limits, session verdict with behaviour tags |
+| P2.15 (done) | Deeper order book (~5,000 shares a level) |
+| P2.16 (done) | Training goals, P&L attribution, cross-session progress, ghost compare |
+| P2.17 (done) | Exchange limit orders plus the practice loop |
+| P2.18 (done) | Settlement leaderboard against the 30 agents and the local archive |
+| P3 (done) | Randomised opaque news with a detail card, ten scenarios, ten drills, home leaderboard, chart throttling |
 
 ## Working rules
 
@@ -387,12 +392,27 @@ Pick a scenario on the entry screen next to the language and length chips:
 | Earnings surprise | Single-name earnings hits: one name gaps, the others react |
 | Risk-off crash | Wide spreads, thin books, correlated selling — the hardest desk day |
 | Short squeeze | Violent squeeze higher, then the unwind |
+| Merger tape | Takeover chatter, counter-bids and regulatory risk in two names |
+| Index rebalance | Passive flows, closing imbalances and a thin late book |
+| Energy shock | A supply route closes; the whole board reprices around energy |
+| Credit scare | Funding stress propagates — liquidity is the only thing that matters |
+| Product launch | A big reveal, a pricing decision and a wave of analyst first looks |
 
 Scenarios can also come from a URL (`#market-maker?scenario=crash`) or from your own JSON via **CUSTOM JSON**
 (validated in the browser; `USE THE EXAMPLE` loads a working template). A scenario sets the headline script
 plus optional `spreadMultiplier` / `liquidityMultiplier`, so a crash day really does trade wider and thinner.
 `?scenario=` composes with `seed`, `lang` and `minutes`.
 
+### News: randomised, opaque, and clickable
+
+Each session draws its headlines from the scenario pool at random (same seed, same tape), with the wording kept
+deliberately vague: the feed tells you what happened, not which way to trade it. Click any item to open the
+`NEWS DETAIL` card — time, tag, symbol, impact, source and the full story. The `impact` badge and the price tape
+still tell you how hard the tape moved after the print, so the reaction is always visible even when the story is not.
+
+On the two hardest tiers (Venture desk / Black-swan fund, Private fund / Jiangyi fund) the ▲/▼ badge is hidden:
+you have to infer direction from the wording and the tape. Replays show it again once the session is over, so the
+review can teach you what the live feed did not tell you.
 ### Informed flow, quote queues and partial fills
 
 Not every RFQ is the same. After a headline, some clients turn **informed**: they appear more often, trade the
@@ -454,9 +474,9 @@ single-file build each start from an empty archive.
 The entry screen also remembers the last language, session length and scenario in
 `market-sim.settings.v1`, so you do not re-pick them every visit.
 
-### Training mode: five drills
+### Training mode: ten drills
 
-The entry screen has a MODE toggle: `SIMULATE` is the free-form desk, `TRAIN` swaps the desk cards for five focused drills. Every drill pins its own desk, five-minute timer, seed, scenario and opening book, so a retry is the same problem until it passes.
+The entry screen has a MODE toggle: `SIMULATE` is the free-form desk, `TRAIN` swaps the desk cards for ten focused drills. Every drill pins its own desk, five-minute timer, seed, scenario and opening book, so a retry is the same problem until it passes.
 
 | Drill | Desk | Seed | Scenario | Passing bar |
 | --- | --- | --- | --- | --- |
@@ -465,6 +485,11 @@ The entry screen has a MODE toggle: `SIMULATE` is the free-form desk, `TRAIN` sw
 | Inventory control | Market Maker | 3307 | Classic, starts long 1,500 TSLA | Largest position at the close <= 300 shares |
 | Adverse selection | Market Maker | 4409 | Risk-off crash | Picked off at most twice, alpha vs buy & hold > $0 |
 | Two venues | Sales | 5501 | Classic | 2+ dealer fills and alpha vs buy & hold > $0 |
+| Work the book | Sales | 6601 | Classic | 2+ limit orders rested, at least one filled |
+| Goal keeper | Market Maker | 7703 | FOMC day | 6+ quotes sent, largest position <= 800 shares |
+| Hedge the book | Sales | 8807 | Earnings surprise, starts long 800 NFLX | 1+ exchange fill and alpha vs buy & hold > $0 |
+| Opaque headlines | Market Maker | 9901 | Energy shock (tier 4) | 2+ headlines traded, picked off at most twice |
+| Risk discipline | Market Maker | 1103 | Credit scare (tier 3) | Largest position <= 500 shares, picked off at most once |
 
 While a drill runs a `TRAIN` strip sits under the top bar with its live metrics (`current / target`, green when the bar is met). The settlement report puts the verdict card right under the benchmark: `PASSED` / `FAILED`, one row per criterion, `ATTEMPTS n · PASSED m`, plus `RETRY DRILL` and `BACK TO DRILLS`. Attempts and best composite live in `market-sim.drills.v1` in localStorage; the drill picker shows the record on each card.
 
@@ -509,6 +534,12 @@ Four small loops that turn a session into practice rather than a one-off game:
 4. **Ghost compare** — `EXPORT GHOST` downloads the session as a small JSON (summary + decision timeline). `IMPORT GHOST` loads a teammate's file into the `GHOST REPLAY` drawer and puts your numbers next to theirs (score, percentile, alpha, total, trades) with a delta column and their decision log. Clearing the ghost is `CLEAR GHOST`.
 
 ### Settlement leaderboard
+
+### Home leaderboard
+
+The entry screen keeps a compact `LOCAL HISTORY` strip once you have finished at least one session: your best
+five saved runs (date, desk, scenario, tier/minutes, score, alpha) with `OPEN ARCHIVE` next to it. It is the
+same `historyLeaderboard()` ranking used inside the settlement report, so the two never disagree.
 
 Every finished session now ends with a two-tab `LEADERBOARD` card:
 

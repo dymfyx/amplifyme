@@ -56,7 +56,17 @@ export interface NewsItem {
   kind: NewsKind
   impact: 1 | 2 | 3
   headline: string
-  /** 利好 +1 / 利空 -1；中性提示为空 */
+  /** 中文标题；界面上按语言挑一版 */
+  headlineZh?: string
+  /** 价格带上的短标签 */
+  short?: string
+  shortZh?: string
+  /** 点开详情才看到的背景描述 */
+  detail?: string
+  detailZh?: string
+  /** 消息来源，例如 market colour / exchange notice */
+  source?: string
+  /** 利好 +1 / 利空 -1；中性提示为空。三档以上界面不展示这个方向 */
   direction?: 1 | -1
   /** 个股新闻的标的；宏观新闻为空 */
   symbol?: string

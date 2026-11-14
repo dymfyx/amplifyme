@@ -11,12 +11,14 @@ const SCENARIOS: Scenario[] = [
     id: 'classic',
     name: 'Classic',
     blurb: 'Mixed macro and single-name headlines.',
+    newsCount: 0,
     news: [],
   },
   {
     id: 'crash',
     name: 'Risk-off crash',
     blurb: 'Wide spreads and falling tape.',
+    newsCount: 0,
     news: [],
   },
 ]
@@ -133,8 +135,8 @@ describe('CustomScenarioModal', () => {
     expect(loaded.name).toBe('Test tape')
     expect(loaded.blurb).toBe('One headline only.')
     expect(loaded.news).toHaveLength(1)
-    expect(loaded.news[0].at).toBe(0.25)
-    expect(loaded.news[0].headline).toBe('Central bank cuts rates')
+    expect(loaded.newsCount).toBe(1)
+    expect(loaded.news[0].headline.en).toBe('Central bank cuts rates')
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

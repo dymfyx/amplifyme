@@ -682,3 +682,24 @@ P0 已交付：
 - 数据来源：玩家这一局由 `Terminal` 用同一个 `buildArchiveSession()` 生成（结算时既写入存档，也用于历史榜），历史来自 `App` 传入的 `archive.file.sessions`。
 - 中文由 `src/i18n/zh-leaderboard.ts` 覆盖（排行榜 / 本局 / 本地历史 / 收益率 / 盈亏 / 档位等）。
 - 测试：`src/engine/leaderboard.test.ts` 7 例（31 人同榜、按收益率而非美元、玩家按收益排位、历史按分排序、当前局补榜、不重复、掉出前 N 仍保留），app 2 例（结算榜单渲染、历史页签）；全量 284 例。
+
+## 27. P3：新闻随机化、十剧本十 drill 与首页榜（P3）
+
+**需求**（m07874 / m07877）：新闻每条都换、标题不给方向、可点开详情；3/4 档不标利好利空；回放恢复方向；首页加历史榜；新闻做中英双语；拆分 `simulation.ts`、优化每 tick 渲染；更新 PDF 指南。
+
+**新闻模型**
+- 每个剧本一个 12 条的双语 `NewsPool`（`src/engine/news/*.ts`，共 10 个池、120 条），条目字段 `{id,kind,tag,impact,symbol?,direction?,driftBps?,short,headline,detail,source}`，`short/headline/detail` 都是 `{en,zh}`。
+- `scheduleNews(pool, seed, count)` 用 Fisher–Yates 洗牌 + 「等分 + 小幅抖动 + 第一条提前」排时间，同 seed 完全复现；标题与正文刻意含糊，方向只存在于 `direction/driftBps`。
+- EVENT FEED 每条是可点击按钮，打开 `NEWS DETAIL` 卡（时间 / 标签 / 标的 / impact / 来源 / 正文）；3/4 档隐藏 ▲▼ 徽标与圆点配色，详情页提示「Direction is not shown at this difficulty tier」。回放恢复方向着色。
+
+**剧本与训练**
+- 剧本 5 → 10：classic / fomc / earnings / crash / squeeze / merger / rebalance / geopolitics / credit / launch，各自带 `newsCount` 与 `spreadMultiplier/liquidityMultiplier`。
+- drill 5 → 10：新增 work-the-book / goal-keeper / hedge-the-book / opaque-headlines / risk-discipline，固定台面、5 分钟、种子、剧本与档位。
+
+**首页历史榜**
+- `HomeLeaderboard` 在入口页读取本地 archive，展示最佳 5 局（日期/台面/剧本/档位·时长/分数/alpha）并提供 `OPEN ARCHIVE`；与结算页共用 `historyLeaderboard()`。
+
+**渲染优化**
+- 引擎 selector 实测（vite-node 基准）：`selectSettlement` 0.006 ms、`scoreSession` 0.007 ms、`decisionReview` 0.005 ms、`evaluateSession` 0.019 ms、`selectAgents` 0.010 ms，合计约 0.8 ms/秒，不是瓶颈。
+- 瓶颈在每 tick 的整树 re-render（尤其 480 点图表）。`ChartPanel` 改为 `memo` + 自定义比较器，`Terminal` 把图表数据按每 3 tick 换引用：4x 下图表重绘从 16 次/秒降到约 5.3 次/秒，其余 tick 由 memo 直接跳过。
+- `simulation.ts` 继续按模块拆分为 `src/engine/simulation/*` + barrel（公开 API 不变），为后续加系统留出边界。

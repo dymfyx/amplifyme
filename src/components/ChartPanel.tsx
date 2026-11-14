@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { Instrument } from '../types'
 import { useT } from '../i18n'
 import PanelHeader from './PanelHeader'
@@ -37,7 +37,7 @@ interface ChartPanelProps {
   simSecondsPerTick: number
 }
 
-export default function ChartPanel({ instrument, series, markers, simSecondsPerTick }: ChartPanelProps) {
+function ChartPanel({ instrument, series, markers, simSecondsPerTick }: ChartPanelProps) {
   const t = useT()
   const [range, setRange] = useState<RangeKey>('6H')
   const pointsFor = (key: RangeKey) =>
@@ -176,3 +176,16 @@ export default function ChartPanel({ instrument, series, markers, simSecondsPerT
     </section>
   )
 }
+/**
+ * 图表是最贵的一次重绘（480 个点三条路径 + 成交量柱）。
+ * 父组件按 tick 把数据节流到每 3 tick 才换一次引用，这里再用引用相等跳过其余渲染。
+ */
+export default memo(
+  ChartPanel,
+  (prev, next) =>
+    prev.series === next.series &&
+    prev.markers === next.markers &&
+    prev.simSecondsPerTick === next.simSecondsPerTick &&
+    prev.instrument.symbol === next.instrument.symbol &&
+    prev.instrument.last === next.instrument.last,
+)

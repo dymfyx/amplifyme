@@ -164,6 +164,7 @@ export default function App() {
         onTier={(nextRole, id) => setTiers((previous) => ({ ...previous, [nextRole]: id }))}
         onOpenArchive={() => setArchiveOpen(true)}
         onOpenProgress={() => setProgressOpen(true)}
+        sessions={archive.file.sessions}
         onSelect={(nextRole) => {
           setRole(nextRole)
           setConfigured(false)

@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import StatusBar from '../components/StatusBar'
-import { readArchive, readSettings } from '../storage/archive'
+import { emptyArchive, readArchive, readSettings, upsertSession, writeArchive } from '../storage/archive'
 import { readDrillRecords } from '../train/records'
 
 beforeEach(() => {
@@ -218,10 +218,12 @@ describe('terminal shell', () => {
   })
 
   it('marks each headline as bullish or bearish in the event feed', () => {
-    openDesk('Market Maker')
+    // 固定种子，否则第一条新闻可能抽到没有方向的 NOTE
+    window.location.hash = '#market-maker?seed=7&minutes=30'
+    render(<App />)
     fireEvent.keyDown(window, { key: '4' })
     act(() => {
-      vi.advanceTimersByTime(7000)
+      vi.advanceTimersByTime(20000)
     })
     const bias = screen.getAllByText(/BULLISH|BEARISH/)
     expect(bias.length).toBeGreaterThan(0)
@@ -746,5 +748,77 @@ describe('session leaderboard', () => {
     expect(screen.getByTestId('leaderboard-history')).toBeInTheDocument()
     expect(screen.getByText(/in your local archive, by composite score/)).toBeInTheDocument()
     expect(screen.getAllByText(/THIS RUN/).length).toBeGreaterThan(0)
+  })
+})
+describe('news feed', () => {
+  const openSeeded = (hash: string) => {
+    window.location.hash = hash
+    render(<App />)
+  }
+
+  it('hides the bullish/bearish badge on the hardest tiers', () => {
+    openSeeded('#market-maker?tier=4&seed=7&minutes=30')
+    act(() => {
+      vi.advanceTimersByTime(40000)
+    })
+    const headline = screen.getByRole('button', { name: /^Open headline:/ })
+    expect(headline).toBeInTheDocument()
+    expect(screen.queryByText(/BULLISH|BEARISH/)).not.toBeInTheDocument()
+    fireEvent.click(headline)
+    expect(screen.getByRole('dialog', { name: 'News detail' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/Direction is not shown at this difficulty tier/),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the full story from the feed on the easier tiers', () => {
+    openSeeded('#market-maker?tier=2&seed=7&minutes=30')
+    act(() => {
+      vi.advanceTimersByTime(40000)
+    })
+    expect(screen.getByText(/BULLISH|BEARISH/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Open headline:/ }))
+    expect(screen.getByRole('dialog', { name: 'News detail' })).toBeInTheDocument()
+    expect(screen.getByText(/^Source:/)).toBeInTheDocument()
+    expect(screen.queryByText(/Direction is not shown at this difficulty tier/)).not.toBeInTheDocument()
+  })
+})
+
+describe('home leaderboard', () => {
+  it('shows the best local runs on the entry screen', () => {
+    const session = {
+      id: 'SALES-7-classic-30-abc',
+      savedAt: new Date().toISOString(),
+      desk: 'sales' as const,
+      scenarioId: 'classic',
+      scenarioName: 'Classic',
+      minutes: 30 as const,
+      tier: 2,
+      seed: 7,
+      total: 12000,
+      realised: 0,
+      unrealised: 12000,
+      commission: 100,
+      cash: 19900000,
+      benchmarkPnl: 8000,
+      alpha: 4000,
+      composite: 61.5,
+      percentile: 55,
+      trades: 3,
+      quotes: 6,
+      informedFills: 1,
+      informedRfqs: 4,
+      adverse: 1,
+      missed: 2,
+      worstDrawdown: 3000,
+      tags: ['Patient'],
+    }
+    writeArchive(upsertSession(emptyArchive(), session))
+    render(<App />)
+    const board = screen.getByTestId('home-leaderboard')
+    expect(board).toBeInTheDocument()
+    expect(within(board).getByText('Your best runs')).toBeInTheDocument()
+    expect(within(board).getByText('Classic')).toBeInTheDocument()
+    expect(within(board).getByText('61.5')).toBeInTheDocument()
   })
 })

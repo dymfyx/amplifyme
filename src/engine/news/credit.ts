@@ -1,0 +1,228 @@
+import type { NewsPool } from '../news'
+
+/**
+ * Credit：流动性传闻与信用利差主导的一天。
+ * 标题只描述「市场在谈什么」，不写结论；正文给口径、给谁在交易、给悬念。
+ */
+export const creditNews: NewsPool = [
+  {
+    id: 'CS1',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 3,
+    direction: -1,
+    driftBps: 80,
+    short: { en: 'liquidity talk', zh: '流动性传闻' },
+    headline: {
+      en: 'Liquidity is the word on every desk this morning',
+      zh: '今天早上每个交易台都在说流动性',
+    },
+    detail: {
+      en: 'The talk centres on a mid-sized institution whose name has circulated since the London open, and no regulator has confirmed anything. Deposit desks say the flow is not abnormal yet, but credit desks are quoting defensively and in smaller size, which is what they do when they cannot price the tail of a story this thin. The absence of a statement is doing more work than a statement could.',
+      zh: '传闻的中心是一家中型机构，它的名字从伦敦开盘起就在流传，但没有任何监管机构确认过什么。存款台说资金流目前还不算异常，但信用台报价更保守、量更小，这是他们给一个这么薄的故事定不出尾部风险价格时的做法。没有声明这件事本身，比任何声明都更有分量。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'CS2',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 2,
+    direction: -1,
+    driftBps: 60,
+    short: { en: 'credit spreads', zh: '信用利差' },
+    headline: {
+      en: 'Credit spreads are the market proxy for the story',
+      zh: '信用利差成了市场解读这则故事的工具',
+    },
+    detail: {
+      en: 'Investment-grade spreads have moved for four straight sessions, and the move is now visible in names with nothing to do with the story. Dealers say the bid for protection is real but not panicked. The relevant comparison is the last two episodes of this kind, both of which resolved in days without a facility being used and without an official statement.',
+      zh: '投资级利差已经连续四个交易日变动，现在连与这则故事无关的名字也能看到。交易员说保护性买盘是真的，但谈不上恐慌。合适的对照是上一轮两次同类事件，那两次都在几天内平息，既没有动用任何救助工具，也没有官方声明。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'CS3',
+    kind: 'equity',
+    tag: 'TSCO',
+    impact: 2,
+    symbol: 'TSCO',
+    direction: -1,
+    driftBps: 45,
+    short: { en: 'supplier finance', zh: '供应商融资' },
+    headline: {
+      en: 'Tesco supplier finance programme gets a second look',
+      zh: 'Tesco 的供应商融资计划被重新审视',
+    },
+    detail: {
+      en: 'An accounting academic and two credit analysts have published notes on how the programme is disclosed, and the question is comparability rather than solvency, which is the distinction the company keeps making. Tesco pays suppliers through a bank facility and reports the balances in the notes. The market has seen this debate before; the difference is that the credit market is already touchy.',
+      zh: '一位会计学者和两位信用分析师就这个计划的披露方式发了报告，争议点是可比性而不是偿付能力，而这也正是公司反复强调的区别。Tesco 通过一家银行安排的融资向供应商付款，余额在附注里披露。这个争论市场以前见过，区别在于信用市场现在本来就敏感。',
+    },
+    source: 'broker round',
+  },
+  {
+    id: 'CS4',
+    kind: 'equity',
+    tag: 'TSLA',
+    impact: 3,
+    symbol: 'TSLA',
+    direction: -1,
+    driftBps: 90,
+    short: { en: 'refinancing', zh: '再融资' },
+    headline: {
+      en: 'Tesla refinancing window is the subject of a broker note',
+      zh: '一份经纪商报告谈到特斯拉的再融资窗口',
+    },
+    detail: {
+      en: 'The note models the cost of rolling a maturing facility in a market where the spread on single-A paper has moved out by a third. Tesla has the cash to repay, which is not the same as saying it will. The analyst argues the decision is a signal about capital allocation, and the equity will trade on the signal rather than the interest cost.',
+      zh: '报告的模型算的是在一个单 A 利差已扩大三分之一的市场上滚动到期授信的成本。特斯拉有现金可以还，但这不等于它会还。分析师认为这个决定是资本配置的信号，股价交易的会是信号，而不是利息成本。',
+    },
+    source: 'broker round',
+  },
+  {
+    id: 'CS5',
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 2,
+    symbol: 'AZN',
+    direction: -1,
+    driftBps: 50,
+    short: { en: 'rating review', zh: '评级复核' },
+    headline: {
+      en: 'A rating agency has placed a review on the sector outlook',
+      zh: '一家评级机构对行业展望启动了复核',
+    },
+    detail: {
+      en: 'The review covers the outlook for the sector rather than any single issuer, and the agency has said ratings themselves are unaffected for now. AstraZeneca is among the names with the largest bond footprints, so its curves are the ones dealers quote first. A change of outlook does not change cash flows, but it changes the cost of the next issue.',
+      zh: '这次复核针对行业展望而不是某一家发行人，机构表示评级本身暂时不受影响。阿斯利康是债券存量最大的名字之一，所以交易员最先报的就是它的曲线。展望变化不改变现金流，但会改变下一笔发行的成本。',
+    },
+    source: 'regulatory notice',
+  },
+  {
+    id: 'CS6',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 2,
+    direction: -1,
+    driftBps: 55,
+    short: { en: 'interbank', zh: '同业拆借' },
+    headline: {
+      en: 'Interbank lending is being repriced at the short end',
+      zh: '同业拆借在短端被重新定价',
+    },
+    detail: {
+      en: 'Overnight rates have printed at the top of the recent range for three sessions running, and one large lender has stopped quoting term money beyond a week. That is a plumbing signal rather than a solvency one, but plumbing is what turns a story into a funding problem. The central bank standing facility is available and unused, which is the detail the desk keeps coming back to.',
+      zh: '隔夜利率连续三个交易日印在近期区间上沿，一家大型资金方已经不再报一周以上的期限价格。这是管道层面的信号，不是偿付能力信号，但管道恰恰是把故事变成融资问题的东西。央行的常备工具摆在那里，没有被使用，而这正是交易台反复回看的那处细节。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'CS7',
+    kind: 'note',
+    tag: 'NOTE',
+    impact: 2,
+    short: { en: 'collateral note', zh: '抵押品提示' },
+    headline: {
+      en: 'A note covers collateral schedules for repo clients',
+      zh: '一份提示涉及回购客户的抵押品安排',
+    },
+    detail: {
+      en: 'The note reminds clients that haircuts on a defined list of collateral have been revised and that substitutions need confirming before the cut-off, with the new schedule published alongside it. It is operational and applies to every counterparty equally. Risk would rather have the argument now than at the point where a margin call has to be met in a hurry, and no client has been singled out.',
+      zh: '这份提示提醒客户，指定一批抵押品的折扣率已经调整，替换需要在截止时间前确认，新的明细表随通知一并发布。它属于操作层面，对所有交易对手一视同仁。风控宁愿现在把账算清楚，也不愿等到某天要仓促补保证金的时候再吵，而且没有点名任何客户。',
+    },
+    source: 'desk note',
+  },
+  {
+    id: 'CS8',
+    kind: 'equity',
+    tag: 'NFLX',
+    impact: 2,
+    symbol: 'NFLX',
+    direction: -1,
+    driftBps: 70,
+    short: { en: 'debt stack', zh: '债务结构' },
+    headline: {
+      en: 'Netflix debt stack is back in the credit conversation',
+      zh: '奈飞的债务结构重回信用市场的讨论',
+    },
+    detail: {
+      en: 'The company funds content with a mix of investment-grade bonds and its own cash, and the bonds have underperformed the index for a week. Equity holders have treated the debt as a non-issue for two years. The question now is whether the cost of the next refinancing shows up in the content budget, and by how much that changes the free-cash-flow story.',
+      zh: '公司用投资级债券和自有现金一起为内容投入融资，而这些债券已经跑输指数一周。过去两年股票投资者一直没把债务当回事。现在的问题是，下一笔再融资的成本会不会进入内容预算，以及这会在多大程度上改变自由现金流的故事。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'CS9',
+    kind: 'equity',
+    tag: 'DUOL',
+    impact: 2,
+    symbol: 'DUOL',
+    direction: 1,
+    driftBps: 110,
+    short: { en: 'facility news', zh: '授信消息' },
+    headline: {
+      en: 'Duolingo banking group is said to have refreshed its facility',
+      zh: '据悉多邻国的银行团更新了授信安排',
+    },
+    detail: {
+      en: 'The facility is small relative to the market cap and was not due until next year, which is why the desk is paying attention. Doing it early is what companies do when they want the option rather than the money. Two holders said the news removes a tail risk they had been carrying; the stock is thin and reacts to anything.',
+      zh: '这笔授信相对市值很小，而且本来要到明年才到期，所以交易台才在意。提前做这件事，通常是公司想要的是选择权而不是钱。两位持有人表示这消除了他们模型里一直挂着的一个尾部风险；这只股票盘口薄，对什么都有反应。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'CS10',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 3,
+    direction: 1,
+    driftBps: 70,
+    short: { en: 'backstop talk', zh: '救助传闻' },
+    headline: {
+      en: 'Talk of a backstop is doing the rounds, unconfirmed',
+      zh: '关于某种兜底安排的传闻在流传，尚未证实',
+    },
+    detail: {
+      en: 'The version the desk hears most often involves a consortium rather than a single buyer, and nobody involved will speak on the record. Official channels say only that they are monitoring. A facility announced late on a Friday is designed to be read over the weekend, and the market has learned that the size matters more than the wording of the announcement.',
+      zh: '交易台听到最多的版本是一个财团而不是单一买家，涉及的各方都不愿具名。官方渠道只说在密切监测。周五晚些时候宣布的工具，本来就是冲着周末被消化去的，而市场已经明白，规模比措辞更重要。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'CS11',
+    kind: 'equity',
+    tag: 'TSCO',
+    impact: 2,
+    symbol: 'TSCO',
+    direction: 1,
+    driftBps: 45,
+    short: { en: 'deposit flows', zh: '存款流向' },
+    headline: {
+      en: 'Tesco Bank deposit base draws attention in the funding data',
+      zh: 'Tesco Bank 的存款基础在融资数据中受到关注',
+    },
+    detail: {
+      en: 'The monthly figures show deposits broadly stable, with a shift from instant access into fixed term. For a bank that funds itself from retail savings, the mix matters more than the total. Tesco Bank is small enough not to be systemic and large enough to be watched, and the parent cash generation is the backstop the market assumes, rightly or not.',
+      zh: '月度数据显示存款总体平稳，结构上从活期转向定期。对一家靠零售储蓄给自己融资的银行来说，结构比总量更重要。Tesco Bank 小到不构成系统性风险，又大到会被盯着看，而母公司造血能力是市场默认的那层兜底，不管这层兜底是否真的成立。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'CS12',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 2,
+    direction: 1,
+    driftBps: 50,
+    short: { en: 'session tone', zh: '尾盘基调' },
+    headline: {
+      en: 'The last hour has a different tone from the morning',
+      zh: '最后一小时的基调和上午不一样',
+    },
+    detail: {
+      en: 'Spreads have given back part of the move and protection buying has slowed to a trickle. Dealers are not calling it resolved: the same story has reversed twice this month inside a day. The desk is watching whether the improvement holds into the fixings, because that is where the real money marks its book and where a failed bounce would be most visible.',
+      zh: '利差回吐了一部分变动，保护性买盘放缓到涓涓细流。交易员不认为事情解决了：同一个故事这个月已经两次在一天之内反转。交易台在看这种改善能不能撑到定盘，因为真正的钱是在那里给账本定价的，而反弹失败在那里也最藏不住。',
+    },
+    source: 'desk note',
+  },
+]

@@ -1,0 +1,228 @@
+import type { NewsPool } from '../news'
+
+/**
+ * Geopolitics：航运要道、能源冲击与避险情绪交织的一天。
+ * 标题只说「发生了什么」，不说「价格会怎么走」：方向留给标的、措辞和盘口去暗示。
+ */
+export const geopoliticsNews: NewsPool = [
+  {
+    id: 'GP1',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 3,
+    direction: -1,
+    driftBps: 70,
+    short: { en: 'shipping lane', zh: '航运要道' },
+    headline: {
+      en: 'A key shipping lane is in focus after an insurer notice',
+      zh: '一家保险机构的通知让一条关键航运要道成为焦点',
+    },
+    detail: {
+      en: 'The notice applies to hull and cargo cover on a narrow set of routes and takes effect at the next renewal. Charter rates on the same route have been quoted with a much wider spread all morning, and two large freight desks are refusing firm numbers beyond a week. Whether the disruption lasts days or months is the question nobody can answer yet.',
+      zh: '这份通知只涉及少数几条航线的船壳险与货物险，从下一个续保日开始生效。同一航线上的租金报价整个上午点差都宽得多，两家大型运价台甚至不愿给出一周以上的确定价格。这次扰动会持续几天还是几个月，是现在没人能回答的问题。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'GP2',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 3,
+    direction: 1,
+    driftBps: 55,
+    short: { en: 'energy complex', zh: '能源价格' },
+    headline: {
+      en: 'Energy benchmarks hold the market attention into the open',
+      zh: '能源基准价格在开盘前后牵动市场注意力',
+    },
+    detail: {
+      en: 'Front-month contracts have traded a range twice as wide as the ten-day average, and the cash market is bidding for prompt delivery rather than later cargoes. Refiners and utilities are the obvious buyers, but the flow print also shows financial money. The desk is treating this as a test of how much risk the system can absorb, not as a settled trend.',
+      zh: '近月合约的日内波幅是十天均值两倍，现货市场在抢即期交付而不是远期货。炼厂和公用事业是明面上的买家，但成交明细里也能看到金融资金。交易台把这件事当作对系统承受风险能力的一次测试，而不是一个已经成立的方向。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'GP3',
+    kind: 'equity',
+    tag: 'TSCO',
+    impact: 2,
+    symbol: 'TSCO',
+    direction: -1,
+    driftBps: 55,
+    short: { en: 'freight costs', zh: '运费成本' },
+    headline: {
+      en: 'Tesco freight arrangements come up in a supplier survey',
+      zh: '一份供应商调查提到 Tesco 的运费安排',
+    },
+    detail: {
+      en: 'The survey covers lead times and landed costs on imported lines, and freight was the component respondents were least willing to put a number on. Tesco guidance has not changed, and the company declined to discuss individual supplier terms. Suppliers say they are being asked to hold prices while container rates are quoted week to week, and the buy-side is focused on how long that can last.',
+      zh: '这份调查覆盖进口商品的交货周期与到岸成本，其中运费是受访者最不愿意给数字的一项。Tesco 的指引没有变化，公司也拒绝谈论具体的供应商条款。供应商说他们被要求维持价格，而集装箱运价是一周一报，买方现在盯的就是这种安排能撑多久。',
+    },
+    source: 'broker round',
+  },
+  {
+    id: 'GP4',
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 2,
+    symbol: 'AZN',
+    direction: -1,
+    driftBps: 60,
+    short: { en: 'air freight', zh: '空运安排' },
+    headline: {
+      en: 'AstraZeneca air freight plans draw a question at a conference',
+      zh: '阿斯利康的空运安排在会议上被追问',
+    },
+    detail: {
+      en: 'Management was asked how much of the shipment schedule depends on routes currently being rerouted, and the answer was that contingency planning predates this week. Analysts note that cold-chain products cannot sit in a port queue, which limits how much volume can be shifted to sea. The company has not changed delivery commitments, and the first hard data point will be the next quarterly update.',
+      zh: '管理层被问到有多少发货计划依赖那些正在改道的航线，回答是应急预案早在本周之前就做好了。分析师提醒，冷链产品没法在港口排队，这也限制了能转到海运的量。公司没有调整交付承诺，第一个硬数据点要等下一次季度更新。',
+    },
+    source: 'company release',
+  },
+  {
+    id: 'GP5',
+    kind: 'equity',
+    tag: 'TSLA',
+    impact: 3,
+    symbol: 'TSLA',
+    direction: -1,
+    driftBps: 85,
+    short: { en: 'battery inputs', zh: '电池原料' },
+    headline: {
+      en: 'Tesla battery input sourcing is back under the microscope',
+      zh: '特斯拉的电池原料采购再次被放大检视',
+    },
+    detail: {
+      en: 'Two cathode materials travel through the affected corridor, according to supply-chain consultants, and Tesla has been diversifying for three years. The question for the desk is inventory: how many weeks of cover sit between the plant and the mine, and the suppliers are not saying, publicly at least. Management has declined to give a number, and sell-side models still assume uninterrupted supply.',
+      zh: '据供应链顾问说法，两种正极材料要经过受影响的通道，而特斯拉已经做了三年分散化。交易台关心的是库存：工厂和矿山之间到底压着几周的料，而供应商至少不肯公开说。管理层拒绝给数字，卖方模型仍然假设供应不中断。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'GP6',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 2,
+    direction: -1,
+    driftBps: 45,
+    short: { en: 'haven bid', zh: '避险需求' },
+    headline: {
+      en: 'Haven assets are the subject of the morning call',
+      zh: '避险资产成为早间电话会的主题',
+    },
+    detail: {
+      en: 'Gold and front-end government paper are seeing two-way interest, and the move in options is toward protection rather than direction. Equity desks report the flow is small but persistent, and that several accounts are trimming rather than exiting. The tell will be whether the bid survives the European afternoon, when liquidity normally improves and the real sellers tend to appear.',
+      zh: '黄金和短端国债出现双向兴趣，期权上的动作偏向保护而不是方向。股票台说这笔流不大但很持续，几家账户是在减仓而不是清仓。关键看这股买盘能不能撑过欧洲午后，那时候流动性通常会好一些，真正的卖家也往往在那时出现。',
+    },
+    source: 'desk note',
+  },
+  {
+    id: 'GP7',
+    kind: 'equity',
+    tag: 'NFLX',
+    impact: 2,
+    symbol: 'NFLX',
+    direction: -1,
+    driftBps: 50,
+    short: { en: 'regional shoot', zh: '海外拍摄' },
+    headline: {
+      en: 'Netflix regional production schedule is under review',
+      zh: '奈飞的区域制作排期正在复核',
+    },
+    detail: {
+      en: 'Two productions due to shoot in the region have had start dates moved, according to people familiar with the schedule, and insurance for cast and crew is the stated reason. The slate is large enough that a short delay does not change the year, but the cost of a moved shoot lands in the current quarter. The street has no line item for this.',
+      zh: '据熟悉排期的人说，两部原定在该地区拍摄的作品被推迟了开机日，给出的理由是演职人员保险。片单够大，短期延后不改变全年，但挪动剧组的成本会落在本季度。市场对这个科目根本没有对应条目。',
+    },
+    source: 'market colour',
+  },
+  {
+    id: 'GP8',
+    kind: 'note',
+    tag: 'NOTE',
+    impact: 1,
+    short: { en: 'margin notice', zh: '保证金通知' },
+    headline: {
+      en: 'A clearing notice covers margin on the affected contracts',
+      zh: '一份清算通知涉及受影响合约的保证金',
+    },
+    detail: {
+      en: 'The notice lifts the initial margin requirement for a defined set of energy and freight contracts and applies from the next session, with no grandfathering for existing positions. Clearing members have been told to expect a second review if the underlying keeps moving. Nothing in the notice is a view on direction; it is a risk control, and the desk has already adjusted its sizing.',
+      zh: '这份通知提高了指定一批能源与运价合约的初始保证金，从下一交易时段起适用，已有持仓不享受过渡安排。清算会员被告知，如果标的继续波动，还会有第二轮复核。通知里没有任何方向判断，它只是风控动作，交易台已经按新要求调了仓位。',
+    },
+    source: 'exchange notice',
+  },
+  {
+    id: 'GP9',
+    kind: 'equity',
+    tag: 'DUOL',
+    impact: 3,
+    symbol: 'DUOL',
+    direction: -1,
+    driftBps: 95,
+    short: { en: 'payment rails', zh: '支付通道' },
+    headline: {
+      en: 'Duolingo payment routes in one region draw a compliance look',
+      zh: '多邻国在一个地区的支付路径引来合规审视',
+    },
+    detail: {
+      en: 'A payments partner has paused a small number of settlement corridors, and Duolingo says the affected share of revenue is in the low single digits. The uncertainty is duration: a pause of two weeks is noise, a pause of two quarters is a guidance problem. The stock trades thin enough that the first institutional order sets the print for the session.',
+      zh: '一家支付合作方暂停了少数几条结算通道，多邻国称受影响收入占比在低个位数。不确定的是持续时间：停两周是噪音，停两个季度就是指引问题。这只股票盘口够薄，第一张机构单子就能定下当天的成交价。',
+    },
+    source: 'regulatory notice',
+  },
+  {
+    id: 'GP10',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 2,
+    direction: 1,
+    driftBps: 55,
+    short: { en: 'talks rumour', zh: '谈判传闻' },
+    headline: {
+      en: 'A diplomatic channel is said to be reopening',
+      zh: '据悉一条外交渠道正在重新打开',
+    },
+    detail: {
+      en: 'The report comes from a single wire and has not been confirmed by either government. Desks are treating it as headline risk rather than information: the first move is usually reversed within the hour if nothing follows, and this wire has been early before. Two macro funds have added risk in small size, and the volatility surface still carries a premium on the downside.',
+      zh: '这条消息只有一家通讯社在报，两国政府都没有确认。交易台把它当标题风险而不是信息：如果后面没有跟进，第一波反应通常一小时内就被抹掉，而这家通讯社以前也抢跑过。两家宏观基金小仓位加了风险，波动率曲面上仍然是下行一侧更贵。',
+    },
+    source: 'wire',
+  },
+  {
+    id: 'GP11',
+    kind: 'equity',
+    tag: 'AZN',
+    impact: 2,
+    symbol: 'AZN',
+    direction: -1,
+    driftBps: 45,
+    short: { en: 'trial sites', zh: '试验站点' },
+    headline: {
+      en: 'AstraZeneca trial sites in the region are being rechecked',
+      zh: '阿斯利康在该地区的试验站点正在重新核查',
+    },
+    detail: {
+      en: 'The recheck is routine after a change in local rules, according to a person close to the process, and covers monitoring visits rather than patient enrolment. Timelines for two mid-stage studies could slip by a quarter if the visits cannot be scheduled. The company says the programme is on track; the desk is watching whether the next milestone date holds.',
+      zh: '据接近流程的人说，这次重新核查是当地规则变化后的例行动作，查的是监查访视而不是入组。如果访视排不上，两项中期研究的时间表可能往后挪一个季度。公司说项目按计划推进；交易台在盯下一个里程碑日期守不守得住。',
+    },
+    source: 'regulatory notice',
+  },
+  {
+    id: 'GP12',
+    kind: 'macro',
+    tag: 'MACRO',
+    impact: 3,
+    direction: 1,
+    driftBps: 65,
+    short: { en: 'late session', zh: '尾盘时段' },
+    headline: {
+      en: 'The close is where the desk expects the tape to be decided',
+      zh: '交易台认为尾盘才是决定行情的地方',
+    },
+    detail: {
+      en: 'Headlines through the afternoon have been walked back one by one, and the flow has shifted from hedging to positioning. Dealers report the earlier protection buying has stopped, and the last hour carries more two-way interest than the previous three combined. The risk is that the walk-back is itself strategic and gets contradicted overnight by a statement from the region.',
+      zh: '午后的几条标题一个接一个被收回，资金从对冲转向建仓。交易员说早些时候的保护性买盘已经停了，最后一小时的双向兴趣比之前三小时加起来还多。风险在于这种「收回」本身就是策略性的，隔夜又被该地区的一纸声明推翻。',
+    },
+    source: 'desk note',
+  },
+]
